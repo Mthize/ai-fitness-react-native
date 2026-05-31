@@ -30,7 +30,7 @@ export default function SplashThree() {
             <AppButton
               label="Login"
               variant="login"
-              onPress={() => router.push("/login")}
+              onPress={() => router.push("/(auth)/login")}
             />
 
             <View style={styles.buttonGap} />
@@ -38,10 +38,10 @@ export default function SplashThree() {
             <AppButton
               label="Register"
               variant="register"
-              onPress={() => router.push("/register")}
+              onPress={() => router.push("/(auth)/register")}
             />
 
-            <Pressable onPress={() => router.push("/register")}>
+            <Pressable onPress={() => router.push("/(auth)/login")}>
               <Text style={styles.guestText}>Continue as a guest</Text>
             </Pressable>
           </View>

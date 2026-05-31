@@ -64,3 +64,12 @@ npx expo lint               # Same as above (expo lint)
 - PostCSS config (`postcss.config.mjs`) required for Tailwind processing
 - Fonts must be loaded before rendering text components (handled in _layout.tsx)
 - Reanimated animations require `react-native-worklets` dependency
+
+## Project Workflow
+
+- **Codex**: Handles app logic, functionality, routing, auth, validation, APIs, and security
+- **Gemini**: Handles UI/design implementation and Figma matching
+- **Security Priority**: Security is the first priority
+- **Route Protection**: All private routes must be protected
+- **Data Isolation**: No signed-out user can access another user's data or any private app subsystem
+- **Authentication**: Clerk is the authentication provider
