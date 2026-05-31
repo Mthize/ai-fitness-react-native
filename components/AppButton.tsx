@@ -6,17 +6,25 @@ type AppButtonProps = {
   label: string;
   variant: "login" | "register";
   onPress?: () => void;
+  disabled?: boolean;
 };
 
-export function AppButton({ label, variant, onPress }: AppButtonProps) {
+export function AppButton({
+  label,
+  variant,
+  onPress,
+  disabled = false,
+}: AppButtonProps) {
   const isLogin = variant === "login";
 
   return (
     <Pressable
+      disabled={disabled}
       onPress={onPress}
       style={{
         ...styles.button,
         backgroundColor: isLogin ? colors.loginButton : colors.registerButton,
+        opacity: disabled ? 0.6 : 1,
       }}
     >
       <Text
@@ -41,7 +49,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   label: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
