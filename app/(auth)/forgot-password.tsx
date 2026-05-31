@@ -11,7 +11,7 @@ import { useSignIn } from "@/lib/clerk-react-runtime";
 import { getClerkErrorMessage } from "@/lib/auth";
 
 export default function ForgotPasswordScreen() {
-  const { signIn, errors, fetchStatus } = useSignIn();
+  const { isLoaded, signIn, errors, fetchStatus } = useSignIn();
   const [emailAddress, setEmailAddress] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -24,6 +24,10 @@ export default function ForgotPasswordScreen() {
   }, []);
 
   async function handleSendCode() {
+    if (!isLoaded) {
+      return;
+    }
+
     setHasSubmitted(true);
     setFormError(null);
 
@@ -108,7 +112,7 @@ export default function ForgotPasswordScreen() {
               <AppButton
                 label={isSubmitting ? "Sending Code..." : "Send Code"}
                 variant="register"
-                disabled={isSubmitting}
+                disabled={!isLoaded || isSubmitting}
                 onPress={handleSendCode}
               />
             </View>

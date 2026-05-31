@@ -20,9 +20,12 @@ export function PasswordInput({
   ...props
 }: PasswordInputProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const toggleButtonClassName = label
+    ? "absolute right-[14px] top-[38px]"
+    : "absolute right-[14px] top-[11px]";
 
   return (
-    <View style={styles.container}>
+    <View className="relative w-full">
       <AuthInput
         label={label}
         error={error}
@@ -32,7 +35,7 @@ export function PasswordInput({
 
       <Pressable
         hitSlop={10}
-        style={[styles.toggleButton, label ? styles.toggleButtonWithLabel : null]}
+        className={toggleButtonClassName}
         onPress={() => setIsVisible((value) => !value)}
       >
         <Image
@@ -46,18 +49,6 @@ export function PasswordInput({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    width: "100%",
-    position: "relative",
-  },
-  toggleButton: {
-    position: "absolute",
-    right: 14,
-    top: 11,
-  },
-  toggleButtonWithLabel: {
-    top: 38,
-  },
   icon: {
     width: 20,
     height: 20,

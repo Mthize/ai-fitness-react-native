@@ -1,7 +1,1 @@
-const {
-  useSignIn,
-  useSignUp,
-  useUser,
-} = require("@clerk-fixed/react");
-
-export { useSignIn, useSignUp, useUser };
+export { useSignIn, useSignUp, useUser } from "@clerk-fixed/react";

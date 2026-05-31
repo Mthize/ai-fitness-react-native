@@ -1,35 +1,20 @@
-import { Image, Pressable, StyleSheet } from "react-native";
 import { router } from "expo-router";
+import { Image, Pressable } from "react-native";
+
+import { colors } from "@/constants/colors";
 
 export function AuthBackButton() {
   return (
     <Pressable
       onPress={() => router.back()}
-      style={styles.container}
+      className="h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-white/15 bg-transparent"
     >
       <Image
         source={require("@/assets/Vector 33.png")}
-        style={styles.icon}
+        className="h-[10px] w-[10px]"
+        style={{ tintColor: colors.journeyText }}
         resizeMode="contain"
       />
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.15)",
-    backgroundColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  icon: {
-    width: 10,
-    height: 10,
-    tintColor: "#FFFFFF",
-  },
-});
