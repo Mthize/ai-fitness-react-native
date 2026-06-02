@@ -9,6 +9,7 @@ type AppScreenProps = {
   contentStyle?: object;
   pressable?: boolean;
   light?: boolean;
+  backgroundColor?: string;
 } & Pick<PressableProps, "onPress">;
 
 export function AppScreen({
@@ -17,14 +18,20 @@ export function AppScreen({
   onPress,
   pressable = false,
   light = false,
+  backgroundColor,
 }: AppScreenProps) {
   const Content = pressable ? Pressable : View;
+  const darkBackgroundColor = backgroundColor ?? colors.background;
 
   return (
     <SafeAreaView
-      style={[styles.safeArea, light && { backgroundColor: "white" }]}
+      style={[
+        styles.safeArea,
+        { backgroundColor: light ? "white" : darkBackgroundColor },
+      ]}
     >
-      {!light && (
+      {/* Most protected screens use the shared dark background layers; `light` opts out for white-backed layouts. */}
+      {!light && !backgroundColor && (
         <>
           <View
             pointerEvents="none"

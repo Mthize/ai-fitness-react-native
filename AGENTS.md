@@ -151,3 +151,15 @@ Before changing anything:
 Every prompt for Codex or Gemini should start with:
 
 "Read AGENTS.md first and follow it strictly."
+
+## Global App Font Rule
+
+- Do not use Poppins anywhere in the app unless explicitly requested.
+- The app UI font must use Montserrat Alternates only.
+- Use `MontserratAlternates-Bold` for headings and large important titles.
+- Use `MontserratAlternates-SemiBold` for buttons, selected states, labels, and important text.
+- Use `MontserratAlternates-Regular` for normal body text and secondary text.
+- This applies to all screens and components, including onboarding, Home, Schedule, Statistics, Settings, tab navigation, modals, bottom sheets, buttons, and cards.
+- Do not introduce new fonts.
+- Do not change global font setup unless explicitly asked.
+- When editing existing code, replace Poppins usage with the closest Montserrat Alternates equivalent.
