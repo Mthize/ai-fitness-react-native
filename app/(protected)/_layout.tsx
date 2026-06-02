@@ -19,8 +19,7 @@ export default function ProtectedLayout() {
   const clerkSessionId = clerk.session?.id ?? null;
   const hasSessionSignal =
     isSignedIn || Boolean(user?.id) || Boolean(clerkSessionId);
-  const shouldAllowProtected =
-    isSignedIn || pending || Boolean(user?.id) || Boolean(clerkSessionId);
+  const shouldAllowProtected = hasSessionSignal;
 
   console.log("[TEMP AUTH DEBUG][protected layout] rendered");
   console.log("[TEMP AUTH DEBUG][protected layout] isLoaded", isLoaded);
@@ -55,11 +54,11 @@ export default function ProtectedLayout() {
     }
   }, [clerkSessionId, isSignedIn, pending, sessionId, user?.id]);
 
-  if (!isLoaded && !shouldAllowProtected) {
+  if (pending || (!isLoaded && !shouldAllowProtected)) {
     return <RouteStatusScreen title="Loading session..." />;
   }
 
-  if (!shouldAllowProtected && !hasSessionSignal) {
+  if (!shouldAllowProtected) {
     return <Redirect href={LOGIN_ROUTE} />;
   }
 

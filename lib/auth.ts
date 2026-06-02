@@ -4,9 +4,9 @@ import { createContext, createElement, useContext, useState } from "react";
 import type { ReactNode } from "react";
 import type { Href } from "expo-router";
 
-export const PRIVATE_HOME_ROUTE = "/" as Href;
-export const LOGIN_ROUTE = "/login" as Href;
-export const ONBOARDING_ROUTE = "/onboarding" as Href;
+export const PRIVATE_HOME_ROUTE = "/" as const satisfies Href;
+export const LOGIN_ROUTE = "/login" as const satisfies Href;
+export const ONBOARDING_ROUTE = "/onboarding" as const satisfies Href;
 export const SESSION_TASK_ROUTES = {
   "choose-organization": "/session-tasks/choose-organization",
   "reset-password": "/session-tasks/reset-password",
