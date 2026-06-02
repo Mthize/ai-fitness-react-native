@@ -4,8 +4,7 @@ import { Text, View } from "react-native";
 import { AppButton } from "@/components/AppButton";
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
-import { useAuth } from "@/lib/clerk-expo-runtime";
-import { useUser } from "@/lib/clerk-react-runtime";
+import { useAuth, useUser } from "@/lib/clerk";
 
 export default function SettingsScreen() {
   const { signOut } = useAuth();

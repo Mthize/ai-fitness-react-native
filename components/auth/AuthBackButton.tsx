@@ -1,20 +1,34 @@
 import { router } from "expo-router";
-import { Image, Pressable } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { Pressable, StyleSheet } from "react-native";
 
 import { colors } from "@/constants/colors";
 
 export function AuthBackButton() {
   return (
-    <Pressable
-      onPress={() => router.back()}
-      className="h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-white/15 bg-transparent"
-    >
-      <Image
-        source={require("@/assets/Vector 33.png")}
-        className="h-[10px] w-[10px]"
-        style={{ tintColor: colors.journeyText }}
-        resizeMode="contain"
+    <Pressable onPress={() => router.back()} style={styles.button}>
+      <Ionicons
+        name="chevron-back"
+        size={18}
+        color={colors.journeyText}
+        style={styles.icon}
       />
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  button: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  icon: {
+    marginLeft: -1,
+  },
+});

@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
-import { useUser } from "@/lib/clerk-react-runtime";
+import { useUser } from "@/lib/clerk";
 
 export default function HomeScreen() {
   const { user } = useUser();

@@ -7,7 +7,7 @@ import { AuthBackButton } from "@/components/auth/AuthBackButton";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
-import { useSignIn } from "@/lib/clerk-react-runtime";
+import { useSignIn } from "@/lib/clerk";
 import { getClerkErrorMessage } from "@/lib/auth";
 
 export default function ResetPasswordScreen() {
