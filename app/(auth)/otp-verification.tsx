@@ -6,14 +6,16 @@ import { AppButton } from "@/components/AppButton";
 import { AuthBackButton } from "@/components/auth/AuthBackButton";
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
-import { useSignIn, useSignUp } from "@/lib/clerk-react-runtime";
+import { useClerk, useSignIn, useSignUp } from "@/lib/clerk";
 import {
   getClerkErrorMessage,
+  getReadableErrorMessage,
   isSignUpVerificationPending,
-  normalizeOtpFlow,
   ONBOARDING_ROUTE,
+  normalizeOtpFlow,
   readParam,
 } from "@/lib/auth";
+import { markSessionActivationPending } from "@/lib/session-activation";
 
 const OTP_LENGTH = 6;
 const OTP_EXPIRY_SECONDS = 15;
@@ -38,13 +40,13 @@ export default function OtpVerificationScreen() {
     errors: signInErrors,
     fetchStatus: signInFetchStatus,
   } = useSignIn();
+  const { setActive } = useClerk();
 
   const [digits, setDigits] = useState<string[]>(() => [...EMPTY_DIGITS]);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(OTP_EXPIRY_SECONDS);
-  const [isCodeExpired, setIsCodeExpired] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
 
   const isSubmitting =
@@ -52,7 +54,7 @@ export default function OtpVerificationScreen() {
 
   const code = digits.join("");
   const isCodeComplete = digits.every((digit) => digit.length === 1);
-  const isVerifyDisabled = isSubmitting || !isCodeComplete || isCodeExpired;
+  const isVerifyDisabled = isSubmitting || !isCodeComplete;
 
   useEffect(() => {
     setFormError(null);
@@ -62,7 +64,6 @@ export default function OtpVerificationScreen() {
 
   useEffect(() => {
     if (secondsRemaining <= 0) {
-      setIsCodeExpired(true);
       return;
     }
 
@@ -93,7 +94,6 @@ export default function OtpVerificationScreen() {
 
   function restartExpiryTimer() {
     setSecondsRemaining(OTP_EXPIRY_SECONDS);
-    setIsCodeExpired(false);
   }
 
   function focusInput(index: number) {
@@ -162,6 +162,7 @@ export default function OtpVerificationScreen() {
   }
 
   async function handleVerify() {
+    console.log("[TEMP AUTH DEBUG] otp submit");
     setHasSubmitted(true);
     setFormError(null);
     setSuccessMessage(null);
@@ -171,38 +172,57 @@ export default function OtpVerificationScreen() {
       return;
     }
 
-    if (isCodeExpired) {
-      setFormError("Verification code expired. Please request a new code.");
-      return;
-    }
-
     if (flow === "sign-up") {
-      const result = await signUp.verifications.verifyEmailCode({
-        code,
-      });
+      try {
+        const completeSignUp = await signUp.attemptEmailAddressVerification({
+          code,
+        });
 
-      if (result.error) {
-        setFormError("Invalid verification code. Please try again.");
-        return;
-      }
+        console.log(
+          "[TEMP AUTH DEBUG] otp verification status",
+          completeSignUp.status,
+        );
+        console.log(
+          "[TEMP AUTH DEBUG] otp createdSessionId",
+          completeSignUp.createdSessionId,
+        );
+        console.log(
+          "[TEMP AUTH DEBUG] otp email verification status",
+          completeSignUp.verifications.emailAddress.status,
+        );
 
-      if (signUp.status === "complete") {
-        const finalized = await signUp.finalize();
-
-        if (finalized.error) {
-          setFormError(
-            finalized.error.longMessage ??
-              finalized.error.message ??
-              "Unable to finish sign up.",
+        if (
+          completeSignUp.status === "complete" &&
+          completeSignUp.createdSessionId
+        ) {
+          console.log("[TEMP AUTH DEBUG] calling setActive");
+          markSessionActivationPending(completeSignUp.createdSessionId);
+          await setActive({
+            session: completeSignUp.createdSessionId,
+            navigate: async () => {
+              console.log("[TEMP AUTH DEBUG] otp setActive navigate callback");
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              console.log("[TEMP AUTH DEBUG] redirecting /onboarding");
+              router.replace(ONBOARDING_ROUTE);
+            },
+          });
+          console.log("[TEMP AUTH DEBUG] otp setActive complete");
+          console.log(
+            "[TEMP AUTH DEBUG] current session id",
+            completeSignUp.createdSessionId,
           );
           return;
         }
 
-        router.replace(ONBOARDING_ROUTE);
-        return;
+        setFormError("Verification is not complete yet.");
+      } catch (error) {
+        setFormError(
+          getReadableErrorMessage(
+            error,
+            "Invalid verification code. Please try again.",
+          ),
+        );
       }
-
-      setFormError("Verification is not complete yet.");
       return;
     }
 
@@ -231,13 +251,13 @@ export default function OtpVerificationScreen() {
     setSuccessMessage(null);
 
     if (flow === "sign-up") {
-      const result = await signUp.verifications.sendEmailCode();
-
-      if (result.error) {
+      try {
+        await signUp.prepareEmailAddressVerification({
+          strategy: "email_code",
+        });
+      } catch (error) {
         setFormError(
-          result.error.longMessage ??
-            result.error.message ??
-            "Unable to resend the code.",
+          getReadableErrorMessage(error, "Unable to resend the code."),
         );
         return;
       }

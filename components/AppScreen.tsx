@@ -8,6 +8,7 @@ type AppScreenProps = {
   children: ReactNode;
   contentStyle?: object;
   pressable?: boolean;
+  light?: boolean;
 } & Pick<PressableProps, "onPress">;
 
 export function AppScreen({
@@ -15,30 +16,35 @@ export function AppScreen({
   contentStyle,
   onPress,
   pressable = false,
+  light = false,
 }: AppScreenProps) {
   const Content = pressable ? Pressable : View;
 
   return (
     <SafeAreaView
-      style={styles.safeArea}
+      style={[styles.safeArea, light && { backgroundColor: "white" }]}
     >
-      <View
-        pointerEvents="none"
-        style={{
-          ...styles.overlay,
-          backgroundColor: colors.backgroundTextureDeep,
-          opacity: 0.22,
-        }}
-      />
+      {!light && (
+        <>
+          <View
+            pointerEvents="none"
+            style={{
+              ...styles.overlay,
+              backgroundColor: colors.backgroundTextureDeep,
+              opacity: 0.22,
+            }}
+          />
 
-      <View
-        pointerEvents="none"
-        style={{
-          ...styles.overlay,
-          backgroundColor: colors.background,
-          opacity: 0.88,
-        }}
-      />
+          <View
+            pointerEvents="none"
+            style={{
+              ...styles.overlay,
+              backgroundColor: colors.background,
+              opacity: 0.88,
+            }}
+          />
+        </>
+      )}
 
       <Content style={[styles.content, contentStyle]} onPress={onPress}>
         {children}

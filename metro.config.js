@@ -8,6 +8,15 @@ const { withNativewind } = require("nativewind/metro");
 const config = getDefaultConfig(__dirname);
 
 const clerkExpoRoot = path.join(__dirname, "node_modules", "@clerk", "expo", "dist");
+const escapedCodexPath = path
+  .resolve(__dirname, ".codex")
+  .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  .replace(/\\/g, "[/\\\\]");
+
+config.resolver.blockList = [
+  ...(config.resolver.blockList ?? []),
+  new RegExp(`^${escapedCodexPath}(?:[/\\\\].*)?$`),
+];
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === "@clerk-fixed/provider") {

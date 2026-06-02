@@ -73,3 +73,81 @@ npx expo lint               # Same as above (expo lint)
 - **Route Protection**: All private routes must be protected
 - **Data Isolation**: No signed-out user can access another user's data or any private app subsystem
 - **Authentication**: Clerk is the authentication provider
+
+## Project Working Rules
+
+Every AI assistant working on this project must read this file first and follow it strictly before making any changes.
+
+## Core Workflow
+
+- Codex handles logic, functionality, routing, validation, state, APIs, auth, and security.
+- Gemini handles UI/design only when explicitly asked.
+- Do not mix responsibilities unless the user clearly asks.
+
+## Critical Auth Rule
+
+Clerk authentication is working and must not be touched unless the user explicitly asks for auth changes.
+
+Do not edit these files unless the task is specifically about auth/routing:
+
+- `app/_layout.tsx`
+- `app/(auth)/_layout.tsx`
+- `app/(protected)/_layout.tsx`
+- `app/(auth)/login.tsx`
+- `app/(auth)/register.tsx`
+- `lib/clerk.ts`
+- `lib/session-activation.ts`
+- `lib/auth.ts`
+
+Do not change:
+
+- `ClerkProvider`
+- `setActive` logic
+- protected route guards
+- auth redirects
+- login/register auth handlers
+
+## Onboarding UI Rule
+
+When working on Account Information / Onboarding UI, only edit:
+
+- `app/(protected)/onboarding/index.tsx`
+- `app/(protected)/onboarding/weight.tsx`
+- `app/(protected)/onboarding/height.tsx`
+- `app/(protected)/onboarding/goal.tsx`
+- `components/onboarding/*` if needed
+
+Do not touch auth files or route guards while styling onboarding.
+
+## Route Rule
+
+Use visible Expo Router paths only:
+
+- `/onboarding`
+- `/onboarding/weight`
+- `/onboarding/height`
+- `/onboarding/goal`
+- `/login`
+- `/register`
+
+Do not use route group paths in navigation:
+
+- `/(protected)/onboarding`
+- `/(auth)/login`
+
+## Safety Rule
+
+Before changing anything:
+
+1. Read `AGENTS.md`.
+2. Check the current task scope.
+3. Do not edit frozen files unless the task explicitly requires it.
+4. Keep changes small.
+5. Run `npm run lint`.
+6. Do not break working auth.
+
+## Prompt Rule
+
+Every prompt for Codex or Gemini should start with:
+
+"Read AGENTS.md first and follow it strictly."

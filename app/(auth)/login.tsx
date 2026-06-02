@@ -1,7 +1,7 @@
-import { Link, router } from "expo-router";
+import { Link, Redirect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { AppButton } from "@/components/AppButton";
 import { AuthSocialButton } from "@/components/auth/AuthSocialButton";
@@ -10,30 +10,54 @@ import { AuthInput } from "@/components/auth/AuthInput";
 import { AppScreen } from "@/components/AppScreen";
 import { AuthBackButton } from "@/components/auth/AuthBackButton";
 import { colors } from "@/constants/colors";
-import { useSSO } from "@/lib/clerk-expo-runtime";
-import { useSignIn } from "@/lib/clerk-react-runtime";
-import { getClerkErrorMessage, ONBOARDING_ROUTE } from "@/lib/auth";
+import { useAuth, useClerk, useSignIn, useSSO } from "@/lib/clerk";
+import {
+  getClerkErrorMessage,
+  getReadableErrorMessage,
+  ONBOARDING_ROUTE,
+} from "@/lib/auth";
+import { markSessionActivationPending } from "@/lib/session-activation";
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
-  const { signIn, errors, fetchStatus } = useSignIn();
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const clerk = useClerk();
+  const { setActive } = clerk;
+  const { isLoaded: isSignInLoaded, signIn, errors, fetchStatus } = useSignIn();
   const { startSSOFlow } = useSSO();
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isActivatingSession, setIsActivatingSession] = useState(false);
   const [activeSocialProvider, setActiveSocialProvider] = useState<
     "google" | "apple" | null
   >(null);
 
-  const isSubmitting = fetchStatus === "fetching";
-  const isSocialSubmitting = activeSocialProvider !== null;
+  const isSocialSubmitting =
+    activeSocialProvider !== null || fetchStatus === "fetching";
+  const isFormValid = emailAddress.trim().length > 0 && password.length > 0;
+  const isLoginDisabled =
+    isSubmitting || isActivatingSession || !isSignInLoaded || !isFormValid;
 
-  useEffect(() => {
-    setFormError(null);
-    setHasSubmitted(false);
-  }, []);
+  console.log("[TEMP AUTH DEBUG][login render] email", emailAddress);
+  console.log("[TEMP AUTH DEBUG][login render] password length", password.length);
+  console.log("[TEMP AUTH DEBUG][login render] loading", isSubmitting);
+  console.log(
+    "[TEMP AUTH DEBUG][login render] activating session",
+    isActivatingSession,
+  );
+  console.log("[TEMP AUTH DEBUG][login render] isDisabled", isLoginDisabled);
+
+  if (!isAuthLoaded) {
+    return null;
+  }
+
+  if (isSignedIn) {
+    return <Redirect href={ONBOARDING_ROUTE} />;
+  }
 
   function clearErrorState() {
     setFormError(null);
@@ -41,48 +65,100 @@ export default function LoginScreen() {
   }
 
   async function handleLogin() {
+    if (!isSignInLoaded) {
+      return;
+    }
+
+    console.log("[TEMP AUTH DEBUG] login submit");
     setHasSubmitted(true);
     setFormError(null);
+    setIsSubmitting(true);
 
     if (!emailAddress.trim()) {
       setFormError("Please enter your email.");
+      setIsSubmitting(false);
       return;
     }
 
     if (!password) {
       setFormError("Please enter your password.");
+      setIsSubmitting(false);
       return;
     }
 
-    const { error } = await signIn.password({
-      emailAddress: emailAddress.trim(),
-      password,
-    });
+    try {
+      const signInAttempt = await signIn.create({
+        identifier: emailAddress.trim(),
+        password,
+      });
 
-    if (error) {
-      setFormError(
-        error.longMessage ?? error.message ?? "Unable to sign in right now.",
+      console.log("[TEMP AUTH DEBUG] signIn status", signInAttempt.status);
+      console.log(
+        "[TEMP AUTH DEBUG] createdSessionId",
+        signInAttempt.createdSessionId,
       );
-      return;
-    }
+      console.log(
+        "[TEMP AUTH DEBUG] supportedFirstFactors",
+        signInAttempt.supportedFirstFactors,
+      );
+      console.log(
+        "[TEMP AUTH DEBUG] firstFactorVerification",
+        signInAttempt.firstFactorVerification,
+      );
 
-    if (signIn.status === "complete") {
-      const finalized = await signIn.finalize();
-
-      if (finalized.error) {
-        setFormError(
-          finalized.error.longMessage ??
-            finalized.error.message ??
-            "Unable to finish signing in.",
+      if (
+        signInAttempt.status === "complete" &&
+        signInAttempt.createdSessionId
+      ) {
+        console.log("[TEMP AUTH DEBUG] calling setActive");
+        setIsActivatingSession(true);
+        markSessionActivationPending(signInAttempt.createdSessionId);
+        await setActive({
+          session: signInAttempt.createdSessionId,
+          navigate: async () => {
+            console.log("[TEMP AUTH DEBUG] setActive navigate callback");
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            console.log("[TEMP AUTH DEBUG] redirecting /onboarding");
+            router.replace(ONBOARDING_ROUTE);
+          },
+        });
+        console.log("[TEMP AUTH DEBUG] setActive complete");
+        console.log(
+          "[TEMP AUTH DEBUG] current session id",
+          clerk.session?.id ?? signInAttempt.createdSessionId,
         );
         return;
       }
 
-      router.replace(ONBOARDING_ROUTE);
-      return;
-    }
+      if (signInAttempt.status === "needs_second_factor") {
+        setFormError(
+          "This account requires a second verification factor before sign-in can finish.",
+        );
+        return;
+      }
 
-    setFormError("This sign-in attempt needs an additional step.");
+      if (signInAttempt.status === "needs_new_password") {
+        setFormError(
+          "This account requires a password reset before sign-in can finish.",
+        );
+        return;
+      }
+
+      if (signInAttempt.status === "needs_client_trust") {
+        setFormError(
+          "This sign-in requires additional client verification before it can finish.",
+        );
+        return;
+      }
+
+      setFormError("This sign-in attempt needs an additional step.");
+    } catch (error) {
+      setFormError(
+        getReadableErrorMessage(error, "Unable to sign in right now."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   async function handleSocialAuth(strategy: "oauth_google" | "oauth_apple") {
@@ -91,12 +167,29 @@ export default function LoginScreen() {
     setActiveSocialProvider(strategy === "oauth_google" ? "google" : "apple");
 
     try {
-      const { createdSessionId, setActive, authSessionResult } =
+      const { createdSessionId, authSessionResult } =
         await startSSOFlow({ strategy });
 
-      if (createdSessionId && setActive) {
-        await setActive({ session: createdSessionId });
-        router.replace(ONBOARDING_ROUTE);
+      if (createdSessionId) {
+        console.log("[TEMP AUTH DEBUG] signIn status", "complete");
+        console.log("[TEMP AUTH DEBUG] createdSessionId", createdSessionId);
+        console.log("[TEMP AUTH DEBUG] calling setActive");
+        setIsActivatingSession(true);
+        markSessionActivationPending(createdSessionId);
+        await setActive({
+          session: createdSessionId,
+          navigate: async () => {
+            console.log("[TEMP AUTH DEBUG] setActive navigate callback");
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            console.log("[TEMP AUTH DEBUG] redirecting /onboarding");
+            router.replace(ONBOARDING_ROUTE);
+          },
+        });
+        console.log("[TEMP AUTH DEBUG] setActive complete");
+        console.log(
+          "[TEMP AUTH DEBUG] current session id",
+          clerk.session?.id ?? createdSessionId,
+        );
         return;
       }
 
@@ -113,6 +206,7 @@ export default function LoginScreen() {
           : "Unable to complete social sign-in.",
       );
     } finally {
+      setIsActivatingSession(false);
       setActiveSocialProvider(null);
     }
   }
@@ -151,6 +245,8 @@ export default function LoginScreen() {
                 placeholder="Enter your email"
                 keyboardType="email-address"
                 autoComplete="email"
+                textContentType="emailAddress"
+                editable={!isSubmitting && !isSocialSubmitting}
                 value={emailAddress}
                 onChangeText={(value) => {
                   setEmailAddress(value);
@@ -163,6 +259,8 @@ export default function LoginScreen() {
                   label=""
                   placeholder="Enter your password"
                   autoComplete="password"
+                  textContentType="password"
+                  editable={!isSubmitting && !isSocialSubmitting}
                   value={password}
                   onChangeText={(value) => {
                     setPassword(value);
@@ -182,7 +280,7 @@ export default function LoginScreen() {
               <AppButton
                 label={isSubmitting ? "Logging In..." : "Login"}
                 variant="register"
-                disabled={isSubmitting || isSocialSubmitting}
+                disabled={isLoginDisabled}
                 onPress={handleLogin}
               />
 
@@ -233,6 +331,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 20,
   },
   content: {
     flex: 1,
@@ -242,24 +341,25 @@ const styles = StyleSheet.create({
   logo: {
     width: 48,
     height: 48,
-    marginTop: 22,
-    marginBottom: 24,
+    marginTop: 18,
+    marginBottom: 20,
   },
   heading: {
     color: colors.journeyText,
     fontFamily: "MontserratAlternates-Bold",
     fontSize: 25,
     lineHeight: 32,
-    marginBottom: 24,
+    marginBottom: 22,
   },
   form: {
-    gap: 12,
+    gap: 14,
   },
   passwordGroup: {
-    gap: 8,
+    gap: 10,
   },
   forgotPasswordRow: {
     alignItems: "flex-end",
+    paddingRight: 4,
   },
   secondaryLink: {
     color: "rgba(255, 255, 255, 0.72)",
@@ -274,7 +374,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   socialSection: {
-    marginTop: 4,
+    marginTop: 6,
     gap: 10,
   },
   socialLabel: {

@@ -1,7 +1,7 @@
-import { Link, router } from "expo-router";
+import { Link, Redirect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { AppButton } from "@/components/AppButton";
 import { AuthSocialButton } from "@/components/auth/AuthSocialButton";
@@ -10,9 +10,14 @@ import { PasswordInput } from "@/components/auth/PasswordInput";
 import { AppScreen } from "@/components/AppScreen";
 import { AuthBackButton } from "@/components/auth/AuthBackButton";
 import { colors } from "@/constants/colors";
-import { useSSO } from "@/lib/clerk-expo-runtime";
-import { useSignUp } from "@/lib/clerk-react-runtime";
-import { getClerkErrorMessage, ONBOARDING_ROUTE } from "@/lib/auth";
+import { useAuth, useClerk, useSignUp, useSSO, useUser } from "@/lib/clerk";
+import {
+  getClerkErrorMessage,
+  getReadableErrorMessage,
+  getSignedInRedirectRoute,
+  ONBOARDING_ROUTE,
+} from "@/lib/auth";
+import { markSessionActivationPending } from "@/lib/session-activation";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -29,7 +34,11 @@ async function checkUsernameAvailability(username: string) {
 }
 
 export default function RegisterScreen() {
-  const { signUp, errors, fetchStatus } = useSignUp();
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const clerk = useClerk();
+  const { setActive } = clerk;
+  const { user } = useUser();
+  const { isLoaded: isSignUpLoaded, signUp, errors, fetchStatus } = useSignUp();
   const { startSSOFlow } = useSSO();
   const [username, setUsername] = useState("");
   const [emailAddress, setEmailAddress] = useState("");
@@ -37,17 +46,53 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isActivatingSession, setIsActivatingSession] = useState(false);
   const [activeSocialProvider, setActiveSocialProvider] = useState<
     "google" | "apple" | null
   >(null);
 
-  const isSubmitting = fetchStatus === "fetching";
-  const isSocialSubmitting = activeSocialProvider !== null;
+  const isSocialSubmitting =
+    activeSocialProvider !== null || fetchStatus === "fetching";
+  const isStrongPassword = STRONG_PASSWORD_REGEX.test(password);
+  const isFormValid =
+    username.trim().length > 0 &&
+    emailAddress.trim().length > 0 &&
+    password.length > 0 &&
+    confirmPassword.length > 0 &&
+    password === confirmPassword &&
+    isStrongPassword;
+  const isRegisterDisabled =
+    isSubmitting || isActivatingSession || !isSignUpLoaded || !isFormValid;
 
-  useEffect(() => {
-    setFormError(null);
-    setHasSubmitted(false);
-  }, []);
+  console.log("[TEMP AUTH DEBUG][register render] username", username);
+  console.log("[TEMP AUTH DEBUG][register render] email", emailAddress);
+  console.log(
+    "[TEMP AUTH DEBUG][register render] password length",
+    password.length,
+  );
+  console.log(
+    "[TEMP AUTH DEBUG][register render] confirmPassword length",
+    confirmPassword.length,
+  );
+  console.log("[TEMP AUTH DEBUG][register render] loading", isSubmitting);
+  console.log(
+    "[TEMP AUTH DEBUG][register render] activating session",
+    isActivatingSession,
+  );
+  console.log("[TEMP AUTH DEBUG][register render] isFormValid", isFormValid);
+  console.log(
+    "[TEMP AUTH DEBUG][register render] isDisabled",
+    isRegisterDisabled,
+  );
+
+  if (!isAuthLoaded) {
+    return null;
+  }
+
+  if (isSignedIn) {
+    return <Redirect href={getSignedInRedirectRoute(user)} />;
+  }
 
   function clearErrorState() {
     setFormError(null);
@@ -55,24 +100,32 @@ export default function RegisterScreen() {
   }
 
   async function handleRegister() {
+    if (!isSignUpLoaded) {
+      return;
+    }
+
     setHasSubmitted(true);
     setFormError(null);
+    setIsSubmitting(true);
 
     const normalizedUsername = username.trim();
     const normalizedEmailAddress = emailAddress.trim();
 
     if (!normalizedUsername) {
       setFormError("Please enter your username.");
+      setIsSubmitting(false);
       return;
     }
 
     if (!normalizedEmailAddress) {
       setFormError("Please enter your email.");
+      setIsSubmitting(false);
       return;
     }
 
     if (!password) {
       setFormError("Please enter your password.");
+      setIsSubmitting(false);
       return;
     }
 
@@ -80,16 +133,19 @@ export default function RegisterScreen() {
       setFormError(
         "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.",
       );
+      setIsSubmitting(false);
       return;
     }
 
     if (!confirmPassword) {
       setFormError("Please confirm your password.");
+      setIsSubmitting(false);
       return;
     }
 
     if (password !== confirmPassword) {
       setFormError("Passwords do not match.");
+      setIsSubmitting(false);
       return;
     }
 
@@ -97,33 +153,40 @@ export default function RegisterScreen() {
 
     if (!availability.available) {
       setFormError("That username is already taken.");
+      setIsSubmitting(false);
       return;
     }
 
-    const { error } = await signUp.create({
-      emailAddress: normalizedEmailAddress,
-      password,
-      unsafeMetadata: {
-        username: availability.normalizedUsername,
-      },
-    });
+    try {
+      const signUpAttempt = await signUp.create({
+        emailAddress: normalizedEmailAddress,
+        password,
+        unsafeMetadata: {
+          username: availability.normalizedUsername,
+        },
+      });
 
-    if (error) {
+      console.log("[TEMP AUTH DEBUG] signUp status", signUpAttempt.status);
+      console.log(
+        "[TEMP AUTH DEBUG] signUp createdSessionId",
+        signUpAttempt.createdSessionId,
+      );
+      console.log(
+        "[TEMP AUTH DEBUG] signUp email verification status",
+        signUpAttempt.verifications.emailAddress.status,
+      );
+
+      await signUp.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+      console.log("[TEMP AUTH DEBUG] email verification prepared");
+    } catch (error) {
       setFormError(
-        error.longMessage ?? error.message ?? "Unable to create your account.",
+        getReadableErrorMessage(error, "Unable to create your account."),
       );
       return;
-    }
-
-    const verification = await signUp.verifications.sendEmailCode();
-
-    if (verification.error) {
-      setFormError(
-        verification.error.longMessage ??
-          verification.error.message ??
-          "Unable to send the verification code.",
-      );
-      return;
+    } finally {
+      setIsSubmitting(false);
     }
 
     router.push({
@@ -141,12 +204,29 @@ export default function RegisterScreen() {
     setActiveSocialProvider(strategy === "oauth_google" ? "google" : "apple");
 
     try {
-      const { createdSessionId, setActive, authSessionResult } =
+      const { createdSessionId, authSessionResult } =
         await startSSOFlow({ strategy });
 
-      if (createdSessionId && setActive) {
-        await setActive({ session: createdSessionId });
-        router.replace(ONBOARDING_ROUTE);
+      if (createdSessionId) {
+        console.log("[TEMP AUTH DEBUG] signUp status", "complete");
+        console.log("[TEMP AUTH DEBUG] signUp createdSessionId", createdSessionId);
+        console.log("[TEMP AUTH DEBUG] calling setActive");
+        setIsActivatingSession(true);
+        markSessionActivationPending(createdSessionId);
+        await setActive({
+          session: createdSessionId,
+          navigate: async () => {
+            console.log("[TEMP AUTH DEBUG] setActive navigate callback");
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            console.log("[TEMP AUTH DEBUG] redirecting /onboarding");
+            router.replace(ONBOARDING_ROUTE);
+          },
+        });
+        console.log("[TEMP AUTH DEBUG] setActive complete");
+        console.log(
+          "[TEMP AUTH DEBUG] current session id",
+          clerk.session?.id ?? createdSessionId,
+        );
         return;
       }
 
@@ -163,6 +243,7 @@ export default function RegisterScreen() {
           : "Unable to complete social sign-up.",
       );
     } finally {
+      setIsActivatingSession(false);
       setActiveSocialProvider(null);
     }
   }
@@ -200,6 +281,8 @@ export default function RegisterScreen() {
                 label=""
                 placeholder="Username"
                 autoComplete="username"
+                textContentType="username"
+                editable={!isSubmitting && !isSocialSubmitting}
                 value={username}
                 onChangeText={(value) => {
                   setUsername(value);
@@ -212,6 +295,8 @@ export default function RegisterScreen() {
                 placeholder="Email"
                 keyboardType="email-address"
                 autoComplete="email"
+                textContentType="emailAddress"
+                editable={!isSubmitting && !isSocialSubmitting}
                 value={emailAddress}
                 onChangeText={(value) => {
                   setEmailAddress(value);
@@ -223,6 +308,8 @@ export default function RegisterScreen() {
                 label=""
                 placeholder="Password"
                 autoComplete="new-password"
+                textContentType="newPassword"
+                editable={!isSubmitting && !isSocialSubmitting}
                 value={password}
                 onChangeText={(value) => {
                   setPassword(value);
@@ -234,6 +321,8 @@ export default function RegisterScreen() {
                 label=""
                 placeholder="Confirm Password"
                 autoComplete="new-password"
+                textContentType="newPassword"
+                editable={!isSubmitting && !isSocialSubmitting}
                 value={confirmPassword}
                 onChangeText={(value) => {
                   setConfirmPassword(value);
@@ -246,7 +335,7 @@ export default function RegisterScreen() {
               <AppButton
                 label={isSubmitting ? "Registering..." : "Register"}
                 variant="register"
-                disabled={isSubmitting || isSocialSubmitting}
+                disabled={isRegisterDisabled}
                 onPress={handleRegister}
               />
 
@@ -299,6 +388,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 20,
   },
   content: {
     flex: 1,
@@ -308,18 +398,18 @@ const styles = StyleSheet.create({
   logo: {
     width: 48,
     height: 48,
-    marginTop: 22,
-    marginBottom: 24,
+    marginTop: 18,
+    marginBottom: 20,
   },
   heading: {
     color: colors.journeyText,
     fontFamily: "MontserratAlternates-Bold",
     fontSize: 25,
     lineHeight: 32,
-    marginBottom: 24,
+    marginBottom: 22,
   },
   form: {
-    gap: 12,
+    gap: 14,
   },
   errorText: {
     color: "#FCA5A5",
@@ -328,7 +418,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   socialSection: {
-    marginTop: 4,
+    marginTop: 6,
     gap: 10,
   },
   socialLabel: {
