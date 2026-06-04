@@ -9,7 +9,7 @@ import {
   Footprints,
   Plus,
 } from "lucide-react-native";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   PanResponder,
@@ -139,20 +139,29 @@ export default function ScheduleScreen() {
   const sheetTranslateY = useRef(new Animated.Value(collapsedTranslate)).current;
   const sheetTranslateYRef = useRef(collapsedTranslate);
   const dragStartTranslateYRef = useRef(collapsedTranslate);
+  const expandedTranslateRef = useRef(expandedTranslate);
+  const collapsedTranslateRef = useRef(collapsedTranslate);
 
   const targetTranslate = isSheetExpanded
     ? expandedTranslate
     : collapsedTranslate;
 
-  if (sheetTranslateYRef.current !== targetTranslate) {
-    sheetTranslateY.setValue(targetTranslate);
-    sheetTranslateYRef.current = targetTranslate;
-  }
+  useEffect(() => {
+    if (sheetTranslateYRef.current !== targetTranslate) {
+      sheetTranslateY.setValue(targetTranslate);
+      sheetTranslateYRef.current = targetTranslate;
+    }
+  }, [sheetTranslateY, targetTranslate]);
+
+  useEffect(() => {
+    expandedTranslateRef.current = expandedTranslate;
+    collapsedTranslateRef.current = collapsedTranslate;
+  }, [collapsedTranslate, expandedTranslate]);
 
   // Snaps the schedule panel to its expanded or collapsed resting point after taps or drag gestures.
   const snapSheet = (toValue: number) => {
     sheetTranslateYRef.current = toValue;
-    setIsSheetExpanded(toValue === expandedTranslate);
+    setIsSheetExpanded(toValue === expandedTranslateRef.current);
 
     Animated.spring(sheetTranslateY, {
       toValue,
@@ -161,16 +170,6 @@ export default function ScheduleScreen() {
       stiffness: 220,
       useNativeDriver: true,
     }).start();
-  };
-
-  const expandSheet = () => {
-    void Haptics.selectionAsync();
-    snapSheet(expandedTranslate);
-  };
-
-  const collapseSheet = () => {
-    void Haptics.selectionAsync();
-    snapSheet(collapsedTranslate);
   };
 
   // Keeps drag gestures vertical and clamps the sheet between its two snap points.
@@ -190,8 +189,8 @@ export default function ScheduleScreen() {
       onPanResponderMove: (_, gestureState) => {
         const nextValue = clampNumber(
           dragStartTranslateYRef.current + gestureState.dy,
-          expandedTranslate,
-          collapsedTranslate,
+          expandedTranslateRef.current,
+          collapsedTranslateRef.current,
         );
 
         sheetTranslateYRef.current = nextValue;
@@ -199,31 +198,31 @@ export default function ScheduleScreen() {
       },
       onPanResponderRelease: (_, gestureState) => {
         const currentValue = sheetTranslateYRef.current;
-        const midpoint = collapsedTranslate / 2;
+        const midpoint = collapsedTranslateRef.current / 2;
 
         if (gestureState.dy < -40 || gestureState.vy < -0.7) {
-          expandSheet();
+          snapSheet(expandedTranslateRef.current);
           return;
         }
 
         if (gestureState.dy > 40 || gestureState.vy > 0.7) {
-          collapseSheet();
+          snapSheet(collapsedTranslateRef.current);
           return;
         }
 
         if (currentValue < midpoint) {
-          expandSheet();
+          snapSheet(expandedTranslateRef.current);
           return;
         }
 
-        collapseSheet();
+        snapSheet(collapsedTranslateRef.current);
       },
       onPanResponderTerminate: () => {
-        const midpoint = collapsedTranslate / 2;
+        const midpoint = collapsedTranslateRef.current / 2;
         snapSheet(
           sheetTranslateYRef.current <= midpoint
-            ? expandedTranslate
-            : collapsedTranslate,
+            ? expandedTranslateRef.current
+            : collapsedTranslateRef.current,
         );
       },
       onShouldBlockNativeResponder: () => false,
@@ -260,7 +259,10 @@ export default function ScheduleScreen() {
 
   const handleCreateActivity = async () => {
     await Haptics.selectionAsync();
-    router.push("/create-activity");
+    router.push({
+      pathname: "/create-activity",
+      params: { returnTo: "schedule" },
+    });
   };
 
   return (

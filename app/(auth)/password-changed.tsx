@@ -24,7 +24,7 @@ export default function PasswordChangedScreen() {
           <AppButton
             label="Back to Login"
             variant="register"
-            onPress={() => router.replace("/(auth)/login")}
+            onPress={() => router.replace("/login")}
           />
         </View>
       </View>

@@ -11,13 +11,19 @@
     "lint": "expo lint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.80",
     "@clerk/expo": "^3.3.0",
+    "@clerk/react": "^6.7.2",
     "@expo-google-fonts/montserrat-alternates": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",
+    "@kingstinct/react-native-healthkit": "^14.0.1",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
+    "@supabase/supabase-js": "^2.107.0",
+    "ai": "^6.0.195",
     "expo": "~54.0.34",
+    "expo-audio": "~1.1.1",
     "expo-auth-session": "~7.0.11",
     "expo-blur": "~15.0.8",
     "expo-constants": "~18.0.13",
@@ -26,6 +32,7 @@
     "expo-image": "~3.0.11",
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.12",
+    "expo-location": "~19.0.8",
     "expo-router": "~6.0.23",
     "expo-secure-store": "~15.0.8",
     "expo-splash-screen": "~31.0.13",
@@ -43,12 +50,17 @@
     "react-native-css": "^3.0.7",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-gifted-charts": "^1.4.77",
+    "react-native-health": "^1.19.0",
+    "react-native-maps": "1.20.1",
+    "react-native-nitro-modules": "^0.35.9",
+    "react-native-purchases": "^10.2.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
@@ -62,5 +74,17 @@
   "overrides": {
     "lightningcss": "1.30.1"
   },
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "@clerk/react>react": "19.1.0",
+        "@clerk/react>react-dom": "19.1.0",
+        "@clerk/shared>react": "19.1.0",
+        "@clerk/shared>react-dom": "19.1.0",
+        "ws>utf-8-validate": "6"
+      }
+    }
+  },
+  "packageManager": "pnpm@10.17.1",
   "private": true
 }

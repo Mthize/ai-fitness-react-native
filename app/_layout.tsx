@@ -40,8 +40,9 @@ function RootNavigator() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+
       <Stack.Protected guard={allowAuth}>
-        <Stack.Screen name="index" />
         <Stack.Screen name="splash-two" />
         <Stack.Screen name="splash-three" />
         <Stack.Screen name="(auth)" />

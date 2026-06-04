@@ -23,7 +23,7 @@ import { useAuth, useClerk, useUser } from "@/lib/clerk";
 import { useSessionActivationState } from "@/lib/session-activation";
 
 const tabIcons = {
-  index: LayoutGrid,
+  home: LayoutGrid,
   schedule: Calendar,
   statistics: ChartNoAxesColumn,
   settings: Settings,
@@ -42,7 +42,7 @@ function TabBarIcon({
 
   return (
     <Icon
-      color={focused ? colors.background : "rgba(255,255,255,0.28)"}
+      color={focused ? colors.activeTabIcon : colors.inactiveTabIcon}
       size={22}
       strokeWidth={2.2}
       absoluteStrokeWidth
@@ -64,7 +64,7 @@ function CustomTabBar({
       style={[
         styles.tabBarContainer,
         {
-          bottom: Math.max(insets.bottom + 8, 28),
+          bottom: Math.max(insets.bottom, 28),
         },
       ]}
     >
@@ -175,7 +175,7 @@ export default function ProtectedTabsLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="home"
         options={{
           title: "Home",
         }}
@@ -207,33 +207,43 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 28,
     right: 28,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "rgba(86, 78, 111, 0.92)",
+    height: 94,
+    borderRadius: 47,
+    backgroundColor: colors.tabBarBackground,
+    borderWidth: 1,
+    borderColor: colors.tabBarOutline,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    elevation: 12,
   },
   tabBarButton: {
     flex: 1,
-    height: 70,
+    height: 94,
     alignItems: "center",
     justifyContent: "center",
   },
   activeTabIconWrapper: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
     backgroundColor: colors.journeyText,
     alignItems: "center",
     justifyContent: "center",
   },
   inactiveTabIconWrapper: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: "rgba(43, 35, 57, 0.42)",
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: colors.inactiveTabBackground,
     alignItems: "center",
     justifyContent: "center",
   },

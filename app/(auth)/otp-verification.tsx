@@ -1,3 +1,44 @@
+/**
+ * OTPVerificationScreen
+ *
+ * Route: /otp-verification
+ * Screen Name: OTP Verification
+ *
+ * One-time password verification screen used for two purposes:
+ * 1. Email verification during sign-up (flow="sign-up")
+ * 2. Password reset verification (flow="reset-password")
+ *
+ * Screen Naming Convention:
+ * - Component export: OTPVerificationScreen
+ * - Route file: otp-verification.tsx (kebab-case for Expo Router)
+ * - User-facing heading: "OTP Verification"
+ * - Button label: "Verify"
+ *
+ * Verification Flow:
+ * 1. Receive flow and email params from previous screen
+ * 2. Display 6-digit OTP input fields
+ * 3. On verify: complete sign-up or redirect to reset-password
+ * 4. On resend: send new code and restart timer
+ *
+ * OTP Configuration:
+ * - Length: 6 digits
+ * - Expiry: 15 seconds (resend cooldown)
+ * - Input: Numeric only, auto-advance on digit entry
+ *
+ * Flow Handling:
+ * - sign-up: Uses signUp.attemptEmailAddressVerification()
+ * - reset-password: Uses signIn.resetPasswordEmailCode.verifyCode()
+ *
+ * Related Screens:
+ * - /register → LoginStepTwoScreen (sign-up flow)
+ * - /forgot-password → ForgotPasswordScreen (reset flow)
+ * - /reset-password → ResetPasswordScreen (new password)
+ *
+ * @see app/(auth)/register.tsx for sign-up initiation
+ * @see app/(auth)/forgot-password.tsx for password reset initiation
+ * @see app/(auth)/reset-password.tsx for new password entry
+ */
+
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useEffect, useRef, useState } from "react";
@@ -21,7 +62,7 @@ const OTP_LENGTH = 6;
 const OTP_EXPIRY_SECONDS = 15;
 const EMPTY_DIGITS = Array.from({ length: OTP_LENGTH }, () => "");
 
-export default function OtpVerificationScreen() {
+export default function OTPVerificationScreen() {
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const { flow: flowParam, email: emailParam } = useLocalSearchParams<{
     flow?: string;
@@ -236,7 +277,7 @@ export default function OtpVerificationScreen() {
     }
 
     router.replace({
-      pathname: "/(auth)/reset-password",
+      pathname: "/reset-password",
       params: { email },
     });
   }
@@ -374,7 +415,7 @@ export default function OtpVerificationScreen() {
                 </Text>
 
                 <Link
-                  href={flow === "sign-up" ? "/(auth)/register" : "/(auth)/forgot-password"}
+                  href={flow === "sign-up" ? "/register" : "/forgot-password"}
                   asChild
                 >
                   <Text style={styles.restartLink}>Start over</Text>
