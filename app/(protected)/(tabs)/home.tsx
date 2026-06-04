@@ -67,7 +67,7 @@ export default function HomeScreen() {
   const markerLeft = chartSpacing * selectedDayIndex;
   const markerTop =
     chartHeight - (selectedCalories / chartMaxValue) * chartHeight;
-  const { activities: todayActivities, currentWorkoutId } = useWorkoutProgress();
+  const { activities: todayActivities, currentWorkoutId } = useWorkoutProgress(user?.id);
   const hasTodayActivities = todayActivities.length > 0;
   // Keep the sheet partially off-screen until it is opened so the modal only reveals the lower schedule panel.
   const sheetClosedOffset = Math.max(screenHeight * 0.42, 320);

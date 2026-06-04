@@ -52,7 +52,6 @@ import {
   getClerkErrorMessage,
   getReadableErrorMessage,
   isSignUpVerificationPending,
-  ONBOARDING_ROUTE,
   normalizeOtpFlow,
   readParam,
 } from "@/lib/auth";
@@ -243,8 +242,8 @@ export default function OTPVerificationScreen() {
             navigate: async () => {
               console.log("[TEMP AUTH DEBUG] otp setActive navigate callback");
               await new Promise((resolve) => setTimeout(resolve, 100));
-              console.log("[TEMP AUTH DEBUG] redirecting /onboarding");
-              router.replace(ONBOARDING_ROUTE);
+              console.log("[TEMP AUTH DEBUG] redirecting /");
+              router.replace("/");
             },
           });
           console.log("[TEMP AUTH DEBUG] otp setActive complete");
@@ -351,7 +350,9 @@ export default function OTPVerificationScreen() {
       >
         <View style={styles.content}>
           <View>
-            <AuthBackButton />
+            <AuthBackButton
+              fallbackHref={flow === "sign-up" ? "/register" : "/forgot-password"}
+            />
 
             <Text style={styles.heading}>OTP Verification</Text>
             <Text style={styles.helperText}>

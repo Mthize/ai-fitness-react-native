@@ -27,31 +27,29 @@ export default function SearchScreen() {
   return (
     <AppScreen contentStyle={styles.screen}>
       <View
-        style={[
-          styles.content,
-          {
-            paddingTop: Math.max(insets.top + 12, 24),
-            paddingBottom: Math.max(insets.bottom + 24, 24),
-          },
-        ]}
+        className="flex-1 px-6"
+        style={{
+          paddingTop: Math.max(insets.top + 12, 24),
+          paddingBottom: Math.max(insets.bottom + 24, 24),
+        }}
       >
         <Pressable
           onPress={() => void handleBack()}
           accessibilityRole="button"
           accessibilityLabel="Go back"
-          style={styles.backButton}
+          className="h-12 w-12 items-center justify-center rounded-full bg-[rgba(255,255,255,0.08)]"
         >
           <ArrowLeft color={colors.journeyText} size={22} strokeWidth={2.4} />
         </Pressable>
 
-        <View style={styles.header}>
+        <View className="mt-7">
           <Text style={styles.title}>Search</Text>
           <Text style={styles.subtitle}>
             Search workouts, plans, or saved activity.
           </Text>
         </View>
 
-        <View style={styles.searchField}>
+        <View className="mt-7 min-h-[60px] flex-row items-center gap-3 rounded-[22px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.08)] px-[18px]">
           <Search
             color="rgba(255,255,255,0.62)"
             size={18}
@@ -61,6 +59,7 @@ export default function SearchScreen() {
             placeholder="Search activity"
             placeholderTextColor="rgba(255,255,255,0.4)"
             selectionColor={colors.journeyText}
+            className="flex-1 py-4 text-[15px]"
             style={styles.searchInput}
           />
         </View>
@@ -73,21 +72,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  backButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  header: {
-    marginTop: 28,
   },
   title: {
     color: colors.journeyText,
@@ -102,23 +86,8 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: 10,
   },
-  searchField: {
-    marginTop: 28,
-    minHeight: 60,
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
   searchInput: {
-    flex: 1,
     color: colors.journeyText,
     fontFamily: "MontserratAlternates-Regular",
-    fontSize: 15,
-    paddingVertical: 16,
   },
 });

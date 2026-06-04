@@ -53,7 +53,6 @@ import {
   getClerkErrorMessage,
   getReadableErrorMessage,
   getSignedInRedirectRoute,
-  ONBOARDING_ROUTE,
 } from "@/lib/auth";
 import { markSessionActivationPending } from "@/lib/session-activation";
 
@@ -256,8 +255,8 @@ export default function LoginStepTwoScreen() {
           navigate: async () => {
             console.log("[TEMP AUTH DEBUG] setActive navigate callback");
             await new Promise((resolve) => setTimeout(resolve, 100));
-            console.log("[TEMP AUTH DEBUG] redirecting /onboarding");
-            router.replace(ONBOARDING_ROUTE);
+            console.log("[TEMP AUTH DEBUG] redirecting /");
+            router.replace("/");
           },
         });
         console.log("[TEMP AUTH DEBUG] setActive complete");
@@ -302,7 +301,7 @@ export default function LoginStepTwoScreen() {
       >
         <View style={styles.content}>
           <View>
-            <AuthBackButton />
+            <AuthBackButton fallbackHref="/splash-three" />
 
             <Image
               source={require("../../assets/Group 19104.png")}

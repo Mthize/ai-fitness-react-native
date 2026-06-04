@@ -101,20 +101,26 @@ type WorkoutProgressSnapshot = {
 };
 
 const progressListeners = new Set<() => void>();
+const DEFAULT_COMPLETED_WORKOUT_IDS = ["warmup-run"] as const satisfies WorkoutId[];
 
 // TODO: Replace temporary workout completion state with persisted user workout progress from backend.
-let completedWorkoutIds = new Set<WorkoutId>(["warmup-run"]);
-let cachedWorkoutProgressSnapshot: WorkoutProgressSnapshot | null = null;
+const completedWorkoutIdsByUserId = new Map<string, Set<WorkoutId>>();
+const cachedWorkoutProgressSnapshotsByUserId = new Map<
+  string,
+  WorkoutProgressSnapshot
+>();
+
+function createCompletedWorkoutIds() {
+  return new Set<WorkoutId>(DEFAULT_COMPLETED_WORKOUT_IDS);
+}
 
 function notifyWorkoutProgress() {
   progressListeners.forEach((listener) => listener());
 }
 
-function getWorkoutProgressSnapshot(): WorkoutProgressSnapshot {
-  if (cachedWorkoutProgressSnapshot) {
-    return cachedWorkoutProgressSnapshot;
-  }
-
+function createWorkoutProgressSnapshot(
+  completedWorkoutIds: ReadonlySet<WorkoutId>,
+): WorkoutProgressSnapshot {
   let hasCurrentWorkout = false;
 
   const activities = HOME_WORKOUT_ORDER.map((activity) => {
@@ -130,13 +136,30 @@ function getWorkoutProgressSnapshot(): WorkoutProgressSnapshot {
     return { ...activity, status: "upcoming" as const };
   });
 
-  cachedWorkoutProgressSnapshot = {
+  return {
     activities,
     currentWorkoutId:
       activities.find((activity) => activity.status === "current")?.id ?? null,
   };
+}
 
-  return cachedWorkoutProgressSnapshot;
+function getWorkoutProgressSnapshot(userId?: string | null): WorkoutProgressSnapshot {
+  if (!userId) {
+    return createWorkoutProgressSnapshot(createCompletedWorkoutIds());
+  }
+
+  const cachedSnapshot = cachedWorkoutProgressSnapshotsByUserId.get(userId);
+  if (cachedSnapshot) {
+    return cachedSnapshot;
+  }
+
+  const completedWorkoutIds =
+    completedWorkoutIdsByUserId.get(userId) ?? createCompletedWorkoutIds();
+  completedWorkoutIdsByUserId.set(userId, completedWorkoutIds);
+
+  const snapshot = createWorkoutProgressSnapshot(completedWorkoutIds);
+  cachedWorkoutProgressSnapshotsByUserId.set(userId, snapshot);
+  return snapshot;
 }
 
 function subscribeToWorkoutProgress(listener: () => void) {
@@ -147,20 +170,30 @@ function subscribeToWorkoutProgress(listener: () => void) {
   };
 }
 
-export function useWorkoutProgress() {
+export function useWorkoutProgress(userId?: string | null) {
   return useSyncExternalStore(
     subscribeToWorkoutProgress,
-    getWorkoutProgressSnapshot,
-    getWorkoutProgressSnapshot,
+    () => getWorkoutProgressSnapshot(userId),
+    () => getWorkoutProgressSnapshot(userId),
   );
 }
 
-export function markWorkoutCompleted(workoutId: WorkoutId) {
+export function markWorkoutCompleted(userId: string | null | undefined, workoutId: WorkoutId) {
+  if (!userId) {
+    return;
+  }
+
+  const completedWorkoutIds =
+    completedWorkoutIdsByUserId.get(userId) ?? createCompletedWorkoutIds();
+
   if (completedWorkoutIds.has(workoutId)) {
     return;
   }
 
-  completedWorkoutIds = new Set(completedWorkoutIds).add(workoutId);
-  cachedWorkoutProgressSnapshot = null;
+  completedWorkoutIdsByUserId.set(
+    userId,
+    new Set(completedWorkoutIds).add(workoutId),
+  );
+  cachedWorkoutProgressSnapshotsByUserId.delete(userId);
   notifyWorkoutProgress();
 }

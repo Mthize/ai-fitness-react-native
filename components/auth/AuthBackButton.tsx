@@ -1,12 +1,25 @@
-import { router } from "expo-router";
+import { Href, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet } from "react-native";
 
 import { colors } from "@/constants/colors";
 
-export function AuthBackButton() {
+type AuthBackButtonProps = {
+  fallbackHref: Href;
+};
+
+export function AuthBackButton({ fallbackHref }: AuthBackButtonProps) {
+  function handlePress() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace(fallbackHref);
+  }
+
   return (
-    <Pressable onPress={() => router.back()} style={styles.button}>
+    <Pressable onPress={handlePress} style={styles.button}>
       <Ionicons
         name="chevron-back"
         size={18}

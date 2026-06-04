@@ -85,7 +85,7 @@ export default function ForgotPasswordScreen() {
       >
         <View style={styles.content}>
           <View>
-            <AuthBackButton />
+            <AuthBackButton fallbackHref="/login" />
 
             <Text style={styles.heading}>Forgot Password?</Text>
             <Text style={styles.helperText}>

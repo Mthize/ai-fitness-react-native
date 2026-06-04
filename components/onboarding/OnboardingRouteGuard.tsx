@@ -3,9 +3,9 @@ import { Redirect } from "expo-router";
 
 import { RouteStatusScreen } from "@/components/RouteStatusScreen";
 import {
-  getUserOnboardingCompleted,
   LOGIN_ROUTE,
   PRIVATE_HOME_ROUTE,
+  useResolvedOnboardingCompletion,
 } from "@/lib/auth";
 import { useAuth, useClerk, useUser } from "@/lib/clerk";
 import { useSessionActivationState } from "@/lib/session-activation";
@@ -21,45 +21,54 @@ export function OnboardingRouteGuard({
   const clerk = useClerk();
   const { user } = useUser();
   const { pending, sessionId } = useSessionActivationState();
+  const userId = user?.id ?? null;
   const clerkSessionId = clerk.session?.id ?? null;
-  const onboardingCompleted = getUserOnboardingCompleted(user);
-  const isSessionAvailable =
-    isSignedIn || pending || Boolean(clerkSessionId) || Boolean(user?.id);
-  let redirectTarget: string | null = null;
+  const hasActiveClerkSession = Boolean(userId && clerkSessionId);
+  const isResolvedSignedIn = Boolean(isSignedIn || hasActiveClerkSession);
+  const {
+    hasCompletedOnboarding: onboardingCompleted,
+    isLoading: isOnboardingStatusLoading,
+  } = useResolvedOnboardingCompletion(user);
+  const routeDecision = !isLoaded
+    ? "loading-auth"
+    : isResolvedSignedIn && isOnboardingStatusLoading
+      ? "loading-onboarding"
+      : isResolvedSignedIn && onboardingCompleted
+        ? PRIVATE_HOME_ROUTE
+        : isResolvedSignedIn
+          ? "allow-onboarding"
+          : pending
+            ? "loading-pending-activation"
+            : LOGIN_ROUTE;
 
-  if (isLoaded) {
-    if (isSignedIn && onboardingCompleted) {
-      redirectTarget = PRIVATE_HOME_ROUTE;
-    } else if (!isSessionAvailable) {
-      redirectTarget = LOGIN_ROUTE;
-    }
+  if (__DEV__) {
+    console.log("[ONBOARDING ROUTING][guard]", {
+      signedInStatus: isSignedIn,
+      userId,
+      clerkSessionId,
+      hasActiveClerkSession,
+      isResolvedSignedIn,
+      clerkMetadataOnboardingValue: {
+        unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
+        public: user?.publicMetadata?.onboardingCompleted ?? null,
+      },
+      secureStoreKey: userId ? `onboarding_completed_${userId}` : null,
+      resolvedOnboardingCompleted: onboardingCompleted,
+      finalRoute: routeDecision,
+      pendingActivation: pending,
+      pendingSessionId: sessionId,
+    });
   }
 
-  console.log("[ONBOARDING GUARD DEBUG] isLoaded", isLoaded);
-  console.log("[ONBOARDING GUARD DEBUG] isSignedIn", isSignedIn);
-  console.log("[ONBOARDING GUARD DEBUG] userId", user?.id ?? null);
-  console.log("[ONBOARDING GUARD DEBUG] clerkSessionId", clerkSessionId);
-  console.log("[ONBOARDING GUARD DEBUG] pendingActivation", pending);
-  console.log("[ONBOARDING GUARD DEBUG] pendingSessionId", sessionId);
-  console.log(
-    "[ONBOARDING GUARD DEBUG] onboardingCompleted",
-    onboardingCompleted,
-  );
-  console.log("[ONBOARDING GUARD DEBUG] redirectTarget", redirectTarget);
-
-  if (!isLoaded) {
+  if (!isLoaded || pending || (isResolvedSignedIn && isOnboardingStatusLoading)) {
     return <RouteStatusScreen title="Loading session..." />;
   }
 
-  if (pending || clerkSessionId) {
-    return <>{children}</>;
-  }
-
-  if (redirectTarget === PRIVATE_HOME_ROUTE) {
+  if (isResolvedSignedIn && onboardingCompleted) {
     return <Redirect href={PRIVATE_HOME_ROUTE} />;
   }
 
-  if (redirectTarget === LOGIN_ROUTE) {
+  if (!isResolvedSignedIn) {
     return <Redirect href={LOGIN_ROUTE} />;
   }
 

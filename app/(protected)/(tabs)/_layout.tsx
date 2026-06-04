@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { PlatformPressable } from "@react-navigation/elements";
 import { useLinkBuilder } from "@react-navigation/native";
+import { BlurView } from "expo-blur";
 import {
   Calendar,
   ChartNoAxesColumn,
@@ -15,9 +16,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RouteStatusScreen } from "@/components/RouteStatusScreen";
 import { colors } from "@/constants/colors";
 import {
-  getUserOnboardingCompleted,
   LOGIN_ROUTE,
   ONBOARDING_ROUTE,
+  useResolvedOnboardingCompletion,
 } from "@/lib/auth";
 import { useAuth, useClerk, useUser } from "@/lib/clerk";
 import { useSessionActivationState } from "@/lib/session-activation";
@@ -68,6 +69,9 @@ function CustomTabBar({
         },
       ]}
     >
+      <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
+      <View pointerEvents="none" style={styles.tabBarOverlay} />
+
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
@@ -124,41 +128,55 @@ export default function ProtectedTabsLayout() {
   const clerk = useClerk();
   const { user } = useUser();
   const { pending, sessionId } = useSessionActivationState();
+  const userId = user?.id ?? null;
   const clerkSessionId = clerk.session?.id ?? null;
-  const onboardingCompleted = getUserOnboardingCompleted(user);
-  const isSessionAvailable =
-    isSignedIn || pending || Boolean(clerkSessionId) || Boolean(user?.id);
+  const hasActiveClerkSession = Boolean(userId && clerkSessionId);
+  const isResolvedSignedIn = Boolean(isSignedIn || hasActiveClerkSession);
+  const {
+    hasCompletedOnboarding: onboardingCompleted,
+    isLoading: isOnboardingStatusLoading,
+  } = useResolvedOnboardingCompletion(user);
 
   // Keep redirects centralized here so tabs never mount for signed-out or not-yet-onboarded users.
   let redirectTarget: string | null = null;
+  const routeDecision = !isLoaded
+    ? "loading-auth"
+    : isResolvedSignedIn && isOnboardingStatusLoading
+      ? "loading-onboarding"
+      : !isResolvedSignedIn
+        ? LOGIN_ROUTE
+        : !onboardingCompleted
+          ? ONBOARDING_ROUTE
+          : "allow-tabs";
 
   if (isLoaded) {
-    if (pending) {
-      redirectTarget = ONBOARDING_ROUTE;
-    } else if (!isSessionAvailable) {
+    if (!isResolvedSignedIn) {
       redirectTarget = LOGIN_ROUTE;
     } else if (!onboardingCompleted) {
       redirectTarget = ONBOARDING_ROUTE;
     }
   }
 
-  console.log("[TABS ONBOARDING DEBUG] isLoaded", isLoaded);
-  console.log("[TABS ONBOARDING DEBUG] pendingActivation", pending);
-  console.log("[TABS ONBOARDING DEBUG] pendingSessionId", sessionId);
-  console.log("[TABS ONBOARDING DEBUG] isSignedIn", isSignedIn);
-  console.log("[TABS ONBOARDING DEBUG] userId", user?.id ?? null);
-  console.log("[TABS ONBOARDING DEBUG] clerkSessionId", clerkSessionId);
-  console.log(
-    "[TABS ONBOARDING DEBUG] unsafeMetadata",
-    user?.unsafeMetadata ?? null,
-  );
-  console.log(
-    "[TABS ONBOARDING DEBUG] onboardingCompleted",
-    onboardingCompleted,
-  );
-  console.log("[TABS ONBOARDING DEBUG] redirectTarget", redirectTarget);
+  if (__DEV__) {
+    console.log("[ONBOARDING ROUTING][tabs]", {
+      signedInStatus: isSignedIn,
+      userId,
+      clerkSessionId,
+      hasActiveClerkSession,
+      isResolvedSignedIn,
+      clerkMetadataOnboardingValue: {
+        unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
+        public: user?.publicMetadata?.onboardingCompleted ?? null,
+      },
+      secureStoreKey: userId ? `onboarding_completed_${userId}` : null,
+      resolvedOnboardingCompleted: onboardingCompleted,
+      finalRoute: routeDecision,
+      pendingActivation: pending,
+      pendingSessionId: sessionId,
+    });
+  }
 
-  if (!isLoaded) {
+  if (!isLoaded || pending || (isResolvedSignedIn && isOnboardingStatusLoading)) {
     return <RouteStatusScreen title="Loading session..." />;
   }
 
@@ -209,7 +227,8 @@ const styles = StyleSheet.create({
     right: 28,
     height: 94,
     borderRadius: 47,
-    backgroundColor: colors.tabBarBackground,
+    overflow: "hidden",
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: colors.tabBarOutline,
     flexDirection: "row",
@@ -224,6 +243,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 16,
     elevation: 12,
+  },
+  tabBarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.tabBarBackground,
   },
   tabBarButton: {
     flex: 1,
