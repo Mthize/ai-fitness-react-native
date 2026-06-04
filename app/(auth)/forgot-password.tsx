@@ -61,7 +61,7 @@ export default function ForgotPasswordScreen() {
     }
 
     router.push({
-      pathname: "/(auth)/otp-verification",
+      pathname: "/otp-verification",
       params: {
         flow: "reset-password",
         email: emailAddress.trim(),
@@ -120,7 +120,7 @@ export default function ForgotPasswordScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Remember Password?</Text>
-            <Link href="/(auth)/login" asChild>
+            <Link href="/login" asChild>
               <Text style={styles.footerLink}>Login</Text>
             </Link>
           </View>

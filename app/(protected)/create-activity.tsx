@@ -1,14 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { ArrowLeft } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, Text, View } from "react-native";
 
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
+import { PRIVATE_HOME_ROUTE } from "@/lib/auth";
 
 export default function CreateActivityScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
 
@@ -23,46 +22,37 @@ export default function CreateActivityScreen() {
     }
 
     if (returnTo === "home") {
-      router.replace("/");
+      router.replace(PRIVATE_HOME_ROUTE);
       return;
     }
 
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-
-    router.replace("/");
+    router.replace("/schedule");
   };
 
   return (
-    <AppScreen contentStyle={styles.screen}>
-      <View
-        style={[
-          styles.content,
-          {
-            paddingTop: Math.max(insets.top + 12, 24),
-            paddingBottom: Math.max(insets.bottom + 24, 24),
-          },
-        ]}
-      >
+    <AppScreen backgroundColor={colors.background}>
+      <View className="flex-1 px-6 pt-6 pb-6">
         <Pressable
           onPress={() => void handleBack()}
-          style={styles.backButton}
+          className="h-12 w-12 items-center justify-center rounded-full bg-white/10"
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <ArrowLeft color={colors.journeyText} size={22} strokeWidth={2.4} />
         </Pressable>
 
-        <View style={styles.header}>
-          <Text style={styles.title}>Create Activity</Text>
-          <Text style={styles.subtitle}>Create or schedule your workout.</Text>
+        <View className="mt-7">
+          <Text className="font-[MontserratAlternates-Bold] text-[32px] leading-[38px] text-white">
+            Create Activity
+          </Text>
+          <Text className="mt-[10px] font-[MontserratAlternates-Regular] text-[15px] leading-[22px] text-white/70">
+            Create or schedule your workout.
+          </Text>
         </View>
 
-        <View style={styles.placeholderCard}>
+        <View className="mt-7 rounded-[28px] border border-white/10 bg-white/10 px-[22px] py-6">
           {/* Placeholder copy keeps the route usable until the real workout and scheduling form is implemented. */}
-          <Text style={styles.placeholderText}>
+          <Text className="font-[MontserratAlternates-SemiBold] text-base leading-[23px] text-white">
             Workout creation form coming soon.
           </Text>
         </View>
@@ -70,53 +60,3 @@ export default function CreateActivityScreen() {
     </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  backButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  header: {
-    marginTop: 28,
-  },
-  title: {
-    color: colors.journeyText,
-    fontFamily: "MontserratAlternates-Bold",
-    fontSize: 32,
-    lineHeight: 38,
-  },
-  subtitle: {
-    color: "rgba(255,255,255,0.72)",
-    fontFamily: "MontserratAlternates-Regular",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 10,
-  },
-  placeholderCard: {
-    marginTop: 28,
-    borderRadius: 28,
-    paddingHorizontal: 22,
-    paddingVertical: 24,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  placeholderText: {
-    color: colors.journeyText,
-    fontFamily: "MontserratAlternates-SemiBold",
-    fontSize: 16,
-    lineHeight: 23,
-  },
-});

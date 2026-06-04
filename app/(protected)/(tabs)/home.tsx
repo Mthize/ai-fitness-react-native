@@ -1,22 +1,25 @@
 import { Image, type ImageSource } from "expo-image";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Plus } from "lucide-react-native";
-import { useCallback, useRef, useState } from "react";
+import { Check, Dumbbell, PersonStanding, Plus } from "lucide-react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Modal,
   PanResponder,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
-import { LineChart } from "react-native-gifted-charts/dist/LineChart";
+import { LineChart } from "react-native-gifted-charts";
 
 import { AppScreen } from "@/components/AppScreen";
+import {
+  type HomeWorkoutActivity,
+  useWorkoutProgress,
+} from "@/components/workout/workoutData";
 import { colors } from "@/constants/colors";
 import { useUser } from "@/lib/clerk";
 
@@ -37,18 +40,6 @@ const chartHeight = 132;
 const chartMaxValue = 100;
 const tooltipWidth = 58;
 const tooltipHeight = 30;
-
-type ActivitySource = "user" | "system" | "ai";
-
-type TodayActivity = {
-  id: string;
-  title: string;
-  detail: string;
-  status: "scheduled" | "active" | "completed";
-  source: ActivitySource;
-  startsAt?: string;
-  isPremium?: boolean;
-};
 
 export default function HomeScreen() {
   const [selectedDayIndex, setSelectedDayIndex] = useState(1);
@@ -76,8 +67,7 @@ export default function HomeScreen() {
   const markerLeft = chartSpacing * selectedDayIndex;
   const markerTop =
     chartHeight - (selectedCalories / chartMaxValue) * chartHeight;
-  // TODO: Replace this temporary empty-state source with the user's real schedule/activity data once Home is connected.
-  const todayActivities: TodayActivity[] = [];
+  const { activities: todayActivities, currentWorkoutId } = useWorkoutProgress();
   const hasTodayActivities = todayActivities.length > 0;
   // Keep the sheet partially off-screen until it is opened so the modal only reveals the lower schedule panel.
   const sheetClosedOffset = Math.max(screenHeight * 0.42, 320);
@@ -103,6 +93,11 @@ export default function HomeScreen() {
       setIsScheduleSheetOpen(false);
     });
   }, [sheetClosedOffset, sheetTranslateY]);
+  const closeScheduleSheetRef = useRef(closeScheduleSheet);
+
+  useEffect(() => {
+    closeScheduleSheetRef.current = closeScheduleSheet;
+  }, [closeScheduleSheet, sheetClosedOffset]);
 
   // Opens the Home-only schedule sheet instead of navigating away so the current chart and list stay in place.
   const openScheduleSheet = async () => {
@@ -131,12 +126,26 @@ export default function HomeScreen() {
 
   const openSearch = () => {
     void Haptics.selectionAsync();
-    router.push("/search");
+    router.push({
+      pathname: "/search",
+      params: { returnTo: "home" },
+    });
   };
 
   const openProfile = () => {
     void Haptics.selectionAsync();
     router.push("/settings");
+  };
+
+  const openWorkout = (item: HomeWorkoutActivity) => {
+    void Haptics.selectionAsync();
+    router.push({
+      pathname: item.route,
+      params: {
+        workoutId: item.id,
+        mode: item.status === "completed" ? "history" : "active",
+      },
+    });
   };
 
   // Allows the bottom sheet to be dismissed with a downward drag while snapping back open on small gestures.
@@ -151,7 +160,7 @@ export default function HomeScreen() {
       },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy > 80 || gestureState.vy > 0.8) {
-          closeScheduleSheet();
+          closeScheduleSheetRef.current();
           return;
         }
 
@@ -180,10 +189,7 @@ export default function HomeScreen() {
       backgroundColor={colors.appDarkBlue}
       contentStyle={styles.screen}
     >
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+      <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.greeting}>
             Hi,{"\n"}
@@ -358,56 +364,126 @@ export default function HomeScreen() {
 
         <Text style={styles.activityLabel}>Today{"'"}s Activity</Text>
 
-          <View style={styles.scheduleList}>
+        <View style={styles.scheduleList}>
+          {/* Current vs upcoming rendering stays temporary here so only the active workout is startable from Home. */}
             {hasTodayActivities ? (
               todayActivities.map((item, index) => {
               const isLastItem = index === todayActivities.length - 1;
-              const isStartable =
-                item.status === "scheduled" || item.status === "active";
-              const isActive = item.status === "active";
+              const isCurrent = item.status === "current";
+              const isUpcoming = item.status === "upcoming";
               const isCompleted = item.status === "completed";
+              const isStartableCurrent =
+                item.id === currentWorkoutId && item.status === "current";
 
-              return (
-                <View key={item.id} style={styles.scheduleRow}>
+              const rowContent = (
+                <>
                   <View style={styles.timelineColumn}>
                     {!isLastItem && <View style={styles.timelineLine} />}
                     <View
                       style={[
                         styles.timelineDot,
-                        isActive && styles.timelineDotActive,
+                        isCurrent && styles.timelineDotActive,
+                        isUpcoming && styles.timelineDotUpcoming,
+                        isCompleted && styles.timelineDotCompleted,
                       ]}
                     >
-                      {isActive && <View style={styles.timelineDotInner} />}
+                      {isCurrent && <View style={styles.timelineDotInner} />}
+                      {isCompleted && (
+                        <Check color="#FFFFFF" size={10} strokeWidth={3} />
+                      )}
                     </View>
                   </View>
 
                   <View style={styles.activityTextBlock}>
-                    <Text
-                      style={[
-                        styles.activityTitle,
-                        !isActive && styles.activityTitleInactive,
-                        isCompleted && styles.activityTitleCompleted,
-                      ]}
-                    >
-                      {item.title}
-                    </Text>
+                    <View style={styles.activityTitleRow}>
+                      <Text
+                        style={[
+                          styles.activityTitle,
+                          isUpcoming && styles.activityTitleInactive,
+                          isCompleted && styles.activityTitleCompleted,
+                        ]}
+                      >
+                        {item.title}
+                      </Text>
+
+                      <View
+                        style={[
+                          styles.activityIconBadge,
+                          isUpcoming && styles.activityIconBadgeUpcoming,
+                        ]}
+                      >
+                        {item.icon === "run" ? (
+                          <PersonStanding
+                            size={14}
+                            color={colors.homeDark}
+                            strokeWidth={2.2}
+                          />
+                        ) : (
+                          <Dumbbell
+                            size={14}
+                            color={colors.homeDark}
+                            strokeWidth={2.2}
+                          />
+                        )}
+                      </View>
+                    </View>
                     <Text
                       style={[
                         styles.activityDetail,
-                        !isActive && styles.activityDetailInactive,
+                        isUpcoming && styles.activityDetailInactive,
                         isCompleted && styles.activityDetailCompleted,
                       ]}
                     >
-                      {item.detail}
+                      {item.subtitle}
                     </Text>
+
+                    {isCompleted && (
+                      <Text style={styles.historyLinkText}>Completed</Text>
+                    )}
                   </View>
 
-                  {isStartable && (
-                    <Pressable style={styles.startButton}>
+                  {isCurrent && isStartableCurrent && (
+                    <Pressable
+                      style={styles.startButton}
+                      onPress={() => openWorkout(item)}
+                    >
                       <Text style={styles.startText}>Start</Text>
                       <View style={styles.startArrow} />
                     </Pressable>
                   )}
+
+                  {isCompleted && (
+                    <View style={styles.completedBadge}>
+                      <Check color={colors.homeDark} size={16} strokeWidth={3} />
+                    </View>
+                  )}
+                </>
+              );
+
+              if (isCompleted || isStartableCurrent) {
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => openWorkout(item)}
+                    style={[
+                      styles.scheduleRow,
+                      isUpcoming && styles.scheduleRowUpcoming,
+                    ]}
+                  >
+                    {rowContent}
+                  </Pressable>
+                );
+              }
+
+              return (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.scheduleRow,
+                    isUpcoming && styles.scheduleRowUpcoming,
+                  ]}
+                >
+                  {rowContent}
                 </View>
               );
             })
@@ -431,7 +507,7 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
+      </View>
 
       <Modal
         visible={isScheduleSheetOpen}
@@ -481,15 +557,15 @@ export default function HomeScreen() {
               {hasTodayActivities ? (
                 todayActivities.map((item) => (
                   <View key={`sheet-${item.id}`} style={styles.sheetItem}>
-                    <View
+                      <View
                       style={[
                         styles.sheetIndicator,
-                        item.status === "active" && styles.sheetIndicatorActive,
+                        item.status === "current" && styles.sheetIndicatorActive,
                       ]}
                     />
                     <View style={styles.sheetItemText}>
                       <Text style={styles.sheetItemTitle}>{item.title}</Text>
-                      <Text style={styles.sheetItemDetail}>{item.detail}</Text>
+                      <Text style={styles.sheetItemDetail}>{item.subtitle}</Text>
                     </View>
                   </View>
                 ))
@@ -508,11 +584,11 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   screen: {
+    flex: 1,
     paddingHorizontal: 28,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 120,
+  content: {
+    flex: 1,
     paddingTop: 58,
   },
   header: {
@@ -758,6 +834,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     minHeight: 62,
   },
+  scheduleRowUpcoming: {
+    opacity: 0.58,
+  },
   timelineDot: {
     alignItems: "center",
     backgroundColor: "rgba(217,217,217,0.48)",
@@ -773,6 +852,15 @@ const styles = StyleSheet.create({
     height: 38,
     width: 38,
   },
+  timelineDotUpcoming: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  timelineDotCompleted: {
+    backgroundColor: colors.homeAqua,
+    borderRadius: 13,
+    height: 26,
+    width: 26,
+  },
   timelineDotInner: {
     backgroundColor: colors.homeDark,
     borderRadius: 5,
@@ -781,6 +869,11 @@ const styles = StyleSheet.create({
   },
   activityTextBlock: {
     flex: 1,
+  },
+  activityTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
   },
   activityTitle: {
     color: colors.journeyText,
@@ -807,6 +900,23 @@ const styles = StyleSheet.create({
   activityDetailCompleted: {
     color: "rgba(255,255,255,0.26)",
   },
+  historyLinkText: {
+    marginTop: 5,
+    color: colors.homeAqua,
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 11,
+  },
+  activityIconBadge: {
+    alignItems: "center",
+    backgroundColor: colors.homeAqua,
+    borderRadius: 10,
+    height: 20,
+    justifyContent: "center",
+    width: 20,
+  },
+  activityIconBadgeUpcoming: {
+    backgroundColor: "rgba(214,235,235,0.42)",
+  },
   startButton: {
     alignItems: "center",
     backgroundColor: colors.homeCream,
@@ -832,6 +942,14 @@ const styles = StyleSheet.create({
     height: 0,
     marginLeft: 8,
     width: 0,
+  },
+  completedBadge: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.homeAqua,
   },
   sheetRoot: {
     flex: 1,

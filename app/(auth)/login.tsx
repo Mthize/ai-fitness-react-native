@@ -1,3 +1,34 @@
+/**
+ * LoginSignUpScreen
+ *
+ * Route: /login
+ * Screen Name: Login / Sign Up
+ *
+ * Primary authentication screen for email/password login and social sign-in
+ * (Google, Apple). This screen handles the complete login flow including
+ * form validation, error handling, and session activation.
+ *
+ * Screen Naming Convention:
+ * - Component export: LoginSignUpScreen
+ * - Route file: login.tsx (kebab-case for Expo Router)
+ * - User-facing heading: "Welcome back! Glad to see you, Again!"
+ * - Button label: "Login"
+ *
+ * Authentication Flow:
+ * - Email/password login via Clerk signIn.create()
+ * - Social login via OAuth (Google, Apple) using startSSOFlow()
+ * - On success: activates session and redirects to /onboarding
+ * - On failure: displays error message
+ *
+ * Related Screens:
+ * - /register → LoginStepTwoScreen (registration)
+ * - /forgot-password → ForgotPasswordScreen (password reset)
+ * - /otp-verification → OTPVerificationScreen (email verification)
+ *
+ * @see app/(auth)/register.tsx for registration
+ * @see app/(auth)/forgot-password.tsx for password reset
+ */
+
 import { Link, Redirect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -20,7 +51,7 @@ import { markSessionActivationPending } from "@/lib/session-activation";
 
 WebBrowser.maybeCompleteAuthSession();
 
-export default function LoginScreen() {
+export default function LoginSignUpScreen() {
   const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
   const clerk = useClerk();
   const { setActive } = clerk;
@@ -269,7 +300,7 @@ export default function LoginScreen() {
                 />
 
                 <View style={styles.forgotPasswordRow}>
-                  <Link href="/(auth)/forgot-password" asChild>
+                  <Link href="/forgot-password" asChild>
                     <Text style={styles.secondaryLink}>Forgot Password?</Text>
                   </Link>
                 </View>
@@ -314,7 +345,7 @@ export default function LoginScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don&apos;t have an account?</Text>
-            <Link href="/(auth)/register" asChild>
+            <Link href="/register" asChild>
               <Text style={styles.footerLink}>Register Now</Text>
             </Link>
           </View>

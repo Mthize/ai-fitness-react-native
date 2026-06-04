@@ -1,3 +1,26 @@
+/**
+ * SplashStepTwoScreen
+ *
+ * Route: /splash-two
+ * Screen Name: Step 2
+ *
+ * Second screen in the three-step onboarding splash flow. Displays the
+ * "Start your Fitness Journey" tagline with the app logo. Auto-advances
+ * to Step 3 after 2.2 seconds, or on tap.
+ *
+ * Screen Naming Convention:
+ * - Component export: SplashStepTwoScreen
+ * - Route file: splash-two.tsx (kebab-case for Expo Router)
+ * - User-facing label: "Step 2" (if shown in UI)
+ *
+ * Navigation Flow:
+ * - Previous: / (Step 1 — SplashStepOneScreen)
+ * - Next: /splash-three (Step 3 — SplashStepThreeScreen)
+ *
+ * @see app/index.tsx for Step 1
+ * @see app/splash-three.tsx for Step 3
+ */
+
 import { router } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
@@ -5,7 +28,7 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
 
-export default function SplashTwo() {
+export default function SplashStepTwoScreen() {
   const hasNavigatedRef = useRef(false);
 
   const goToNextScreen = () => {

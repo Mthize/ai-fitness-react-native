@@ -1,10 +1,17 @@
+const path = require("path");
+
 module.exports = function (api) {
   api.cache(true);
+
+  const expoDir = path.dirname(require.resolve("expo/package.json"));
+  const expoPreset = require.resolve("babel-preset-expo", {
+    paths: [expoDir],
+  });
 
   return {
     presets: [
       [
-        require.resolve("expo/node_modules/babel-preset-expo"),
+        expoPreset,
         {
           unstable_transformImportMeta: true,
         },

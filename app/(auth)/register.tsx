@@ -1,3 +1,41 @@
+/**
+ * LoginStepTwoScreen
+ *
+ * Route: /register
+ * Screen Name: Sign Up (second step of login/registration flow)
+ *
+ * User registration screen for creating new accounts. Collects username,
+ * email, password, and confirm password. Handles email verification flow
+ * and social sign-up via OAuth (Google, Apple).
+ *
+ * Screen Naming Convention:
+ * - Component export: LoginStepTwoScreen
+ * - Route file: register.tsx (kebab-case for Expo Router)
+ * - User-facing heading: "Hello! Register to get started"
+ * - Button label: "Register"
+ *
+ * Registration Flow:
+ * 1. Validate form (username, email, strong password, confirm password)
+ * 2. Create account via Clerk signUp.create()
+ * 3. Prepare email verification via prepareEmailAddressVerification()
+ * 4. Redirect to /otp-verification with flow="sign-up"
+ * 5. On OTP success: activates session and redirects to /onboarding
+ *
+ * Password Requirements:
+ * - Minimum 8 characters
+ * - At least one uppercase letter
+ * - At least one lowercase letter
+ * - At least one number
+ * - At least one symbol
+ *
+ * Related Screens:
+ * - /login → LoginSignUpScreen (existing users)
+ * - /otp-verification → OTPVerificationScreen (email verification)
+ *
+ * @see app/(auth)/login.tsx for login
+ * @see app/(auth)/otp-verification.tsx for email verification
+ */
+
 import { Link, Redirect, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -33,7 +71,7 @@ async function checkUsernameAvailability(username: string) {
   };
 }
 
-export default function RegisterScreen() {
+export default function LoginStepTwoScreen() {
   const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
   const clerk = useClerk();
   const { setActive } = clerk;
@@ -190,7 +228,7 @@ export default function RegisterScreen() {
     }
 
     router.push({
-      pathname: "/(auth)/otp-verification",
+      pathname: "/otp-verification",
       params: {
         flow: "sign-up",
         email: normalizedEmailAddress,
@@ -369,7 +407,7 @@ export default function RegisterScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account?</Text>
-            <Link href="/(auth)/login" asChild>
+            <Link href="/login" asChild>
               <Text style={styles.footerLink}>Login Now</Text>
             </Link>
           </View>

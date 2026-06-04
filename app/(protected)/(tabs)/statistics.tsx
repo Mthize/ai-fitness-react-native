@@ -144,7 +144,7 @@ export default function StatisticsScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.white,
   },
   bottomDarkFill: {
     position: "absolute",
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   headerSection: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.white,
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 8,
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#F7BFE3",
+    backgroundColor: colors.statisticsPink,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     height: 58,
     borderRadius: 29,
-    backgroundColor: "#E4E2E7",
+    backgroundColor: colors.statisticsSurface,
     padding: 4,
     marginTop: 16,
   },
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   periodTextActive: {
-    color: "#FFFFFF",
+    color: colors.white,
     fontFamily: "MontserratAlternates-SemiBold",
   },
   periodTextInactive: {
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     width: 354,
     height: 284,
     borderRadius: 30,
-    backgroundColor: "#F5F2B8",
+    backgroundColor: colors.statisticsCream,
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 14,
@@ -307,10 +307,10 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   walkCard: {
-    backgroundColor: "#D3E8E8",
+    backgroundColor: colors.homeAquaSoft,
   },
   drinkCard: {
-    backgroundColor: "#E8E8E8",
+    backgroundColor: colors.statisticsNeutralCard,
   },
   metricIconCircle: {
     width: 42,

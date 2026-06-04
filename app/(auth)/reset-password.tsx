@@ -59,7 +59,7 @@ export default function ResetPasswordScreen() {
     }
 
     signIn.reset();
-    router.replace("/(auth)/password-changed");
+    router.replace("/password-changed");
   }
 
   const errorMessage =

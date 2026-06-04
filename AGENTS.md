@@ -10,14 +10,14 @@
 
 ```bash
 # Development
-npx expo start              # Start Metro dev server
-npx expo start --android    # Run on Android emulator
-npx expo start --ios        # Run on iOS simulator
-npx expo start --web        # Run web build
+pnpm start                  # Start Metro dev server
+pnpm android                # Run on Android emulator
+pnpm ios                    # Run on iOS simulator
+pnpm web                    # Run web build
 
 # Linting & Type Checking
-npm run lint                # Run ESLint
-npx expo lint               # Same as above (expo lint)
+pnpm lint                   # Run ESLint
+pnpm exec expo lint         # Same as above (expo lint)
 ```
 
 ## Architecture
@@ -66,6 +66,8 @@ npx expo lint               # Same as above (expo lint)
 - Reanimated animations require `react-native-worklets` dependency
 
 ## Project Workflow
+
+- **Package Manager**: Use `pnpm` for installs and scripts. Do not use `npm` or `npx` for this project.
 
 - **Codex**: Handles app logic, functionality, routing, auth, validation, APIs, and security
 - **Gemini**: Handles UI/design implementation and Figma matching
@@ -143,7 +145,7 @@ Before changing anything:
 2. Check the current task scope.
 3. Do not edit frozen files unless the task explicitly requires it.
 4. Keep changes small.
-5. Run `npm run lint`.
+5. Run `pnpm lint`.
 6. Do not break working auth.
 
 ## Prompt Rule

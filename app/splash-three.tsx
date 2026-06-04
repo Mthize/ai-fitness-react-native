@@ -1,3 +1,28 @@
+/**
+ * SplashStepThreeScreen
+ *
+ * Route: /splash-three
+ * Screen Name: Step 3
+ *
+ * Final screen in the three-step onboarding splash flow. Displays the
+ * "Start your Fitness Journey" tagline with Login and Register buttons.
+ * This is the entry point for user authentication.
+ *
+ * Screen Naming Convention:
+ * - Component export: SplashStepThreeScreen
+ * - Route file: splash-three.tsx (kebab-case for Expo Router)
+ * - User-facing label: "Step 3" (if shown in UI)
+ *
+ * Navigation Flow:
+ * - Previous: /splash-two (Step 2 — SplashStepTwoScreen)
+ * - Next: /login or /register
+ *
+ * @see app/index.tsx for Step 1
+ * @see app/splash-two.tsx for Step 2
+ * @see app/(auth)/login.tsx for LoginSignUpScreen
+ * @see app/(auth)/register.tsx for LoginStepTwoScreen
+ */
+
 import { router } from "expo-router";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -5,7 +30,7 @@ import { AppButton } from "@/components/AppButton";
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
 
-export default function SplashThree() {
+export default function SplashStepThreeScreen() {
   return (
     <AppScreen contentStyle={styles.screen}>
       <View style={styles.content}>
@@ -30,7 +55,7 @@ export default function SplashThree() {
             <AppButton
               label="Login"
               variant="login"
-              onPress={() => router.push("/(auth)/login")}
+              onPress={() => router.push("/login")}
             />
 
             <View style={styles.buttonGap} />
@@ -38,10 +63,10 @@ export default function SplashThree() {
             <AppButton
               label="Register"
               variant="register"
-              onPress={() => router.push("/(auth)/register")}
+              onPress={() => router.push("/register")}
             />
 
-            <Pressable onPress={() => router.push("/(auth)/login")}>
+            <Pressable onPress={() => router.push("/login")}>
               <Text style={styles.guestText}>Continue as a guest</Text>
             </Pressable>
           </View>
