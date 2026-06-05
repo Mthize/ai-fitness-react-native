@@ -1,10 +1,13 @@
 import { Image, type ImageSource } from "expo-image";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { useFocusEffect } from "@react-navigation/native";
 import { Check, Dumbbell, PersonStanding, Plus } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
+  FlatList,
   Modal,
   PanResponder,
   Pressable,
@@ -13,6 +16,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LineChart } from "react-native-gifted-charts";
 
 import { AppScreen } from "@/components/AppScreen";
@@ -21,6 +25,15 @@ import {
   useWorkoutProgress,
 } from "@/components/workout/workoutData";
 import { colors } from "@/constants/colors";
+import type {
+  ScheduledWorkoutWithPlanRow,
+  WorkoutSessionRow,
+} from "@/lib/backend/types";
+import {
+  getScheduledWorkouts,
+  getWorkoutHistory,
+  subscribeToScheduledWorkoutChanges,
+} from "@/lib/backend/workouts";
 import { useUser } from "@/lib/clerk";
 
 const weekDays = ["Mon", "Tues", "Wed", "Thurs", "Fri", "Sat", "Sun"];
@@ -41,9 +54,28 @@ const chartMaxValue = 100;
 const tooltipWidth = 58;
 const tooltipHeight = 30;
 
+type HomeDisplayWorkout = {
+  id: string;
+  title: string;
+  subtitle: string;
+  status: "completed" | "current" | "upcoming";
+  route: "/workout/map" | "/workout/workout";
+  icon: "run" | "strength";
+  workoutPlanId?: string;
+  scheduledWorkoutId?: string;
+  durationSeconds?: number;
+};
+
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const [selectedDayIndex, setSelectedDayIndex] = useState(1);
   const [isScheduleSheetOpen, setIsScheduleSheetOpen] = useState(false);
+  const [scheduledWorkouts, setScheduledWorkouts] = useState<
+    ScheduledWorkoutWithPlanRow[]
+  >([]);
+  const [workoutHistory, setWorkoutHistory] = useState<WorkoutSessionRow[]>([]);
+  const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(true);
+  const [workoutLoadError, setWorkoutLoadError] = useState<string | null>(null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { user } = useUser();
   const selectedCalories = weeklyCalories[selectedDayIndex]?.calories ?? 0;
@@ -67,8 +99,10 @@ export default function HomeScreen() {
   const markerLeft = chartSpacing * selectedDayIndex;
   const markerTop =
     chartHeight - (selectedCalories / chartMaxValue) * chartHeight;
-  const { activities: todayActivities, currentWorkoutId } = useWorkoutProgress(user?.id);
-  const hasTodayActivities = todayActivities.length > 0;
+  const {
+    activities: fallbackActivities,
+    currentWorkoutId: fallbackCurrentWorkoutId,
+  } = useWorkoutProgress(user?.id);
   // Keep the sheet partially off-screen until it is opened so the modal only reveals the lower schedule panel.
   const sheetClosedOffset = Math.max(screenHeight * 0.42, 320);
   const sheetTranslateY = useRef(new Animated.Value(sheetClosedOffset)).current;
@@ -77,6 +111,7 @@ export default function HomeScreen() {
     Math.min(chartWidth - tooltipWidth, markerLeft - tooltipWidth / 2),
   );
   const tooltipTop = Math.max(0, markerTop - 44);
+  const homeBottomInset = Math.max(insets.bottom + 128, 152);
   const overlayOpacity = sheetTranslateY.interpolate({
     inputRange: [0, sheetClosedOffset],
     outputRange: [1, 0],
@@ -137,15 +172,220 @@ export default function HomeScreen() {
     router.push("/settings");
   };
 
-  const openWorkout = (item: HomeWorkoutActivity) => {
+  const openWorkout = (item: HomeDisplayWorkout) => {
     void Haptics.selectionAsync();
     router.push({
       pathname: item.route,
       params: {
-        workoutId: item.id,
+        workoutPlanId: item.workoutPlanId,
+        scheduledWorkoutId: item.scheduledWorkoutId,
+        title: item.title,
+        durationSeconds:
+          item.durationSeconds != null ? String(item.durationSeconds) : undefined,
         mode: item.status === "completed" ? "history" : "active",
       },
     });
+  };
+
+  const loadHomeWorkouts = useCallback(async () => {
+    if (!user?.id) {
+      setScheduledWorkouts([]);
+      setWorkoutHistory([]);
+      setWorkoutLoadError(
+        "Your workout data will appear here once your signed-in profile is ready.",
+      );
+      setIsLoadingWorkouts(false);
+      return;
+    }
+
+    setIsLoadingWorkouts(true);
+    setWorkoutLoadError(null);
+
+    try {
+      const [scheduled, history] = await Promise.all([
+        getScheduledWorkouts(user.id),
+        getWorkoutHistory(user.id),
+      ]);
+
+      setScheduledWorkouts(scheduled);
+      setWorkoutHistory(history);
+    } catch (error) {
+      if (__DEV__) {
+        console.warn("[home] Failed to load workouts.", error);
+      }
+      setScheduledWorkouts([]);
+      setWorkoutHistory([]);
+      setWorkoutLoadError(
+        "Saved workouts are not available right now. Supabase or row permissions may still be configuring.",
+      );
+    } finally {
+      setIsLoadingWorkouts(false);
+    }
+  }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadHomeWorkouts();
+    }, [loadHomeWorkouts]),
+  );
+
+  useEffect(() => {
+    return subscribeToScheduledWorkoutChanges(() => {
+      void loadHomeWorkouts();
+    });
+  }, [loadHomeWorkouts]);
+
+  const scheduledDisplayWorkouts = useMemo(() => {
+    return buildScheduledDisplayWorkouts(scheduledWorkouts, workoutHistory);
+  }, [scheduledWorkouts, workoutHistory]);
+
+  const completedDisplayWorkouts = useMemo(() => {
+    return workoutHistory.map(mapWorkoutSessionToDisplayWorkout);
+  }, [workoutHistory]);
+
+  const backendDisplayWorkouts = useMemo(
+    () => [...scheduledDisplayWorkouts, ...completedDisplayWorkouts],
+    [completedDisplayWorkouts, scheduledDisplayWorkouts],
+  );
+
+  const displayedWorkouts = useMemo<HomeDisplayWorkout[]>(() => {
+    if (workoutLoadError) {
+      return fallbackActivities.map(mapFallbackWorkoutToDisplayWorkout);
+    }
+
+    return backendDisplayWorkouts;
+  }, [backendDisplayWorkouts, fallbackActivities, workoutLoadError]);
+
+  const currentWorkoutId = useMemo(() => {
+    const currentWorkout = displayedWorkouts.find(
+      (workout) => workout.status === "current",
+    );
+
+    return currentWorkout?.id ?? fallbackCurrentWorkoutId;
+  }, [displayedWorkouts, fallbackCurrentWorkoutId]);
+
+  const hasTodayActivities = displayedWorkouts.length > 0;
+
+  const renderWorkoutRow = ({
+    item,
+    index,
+  }: {
+    item: HomeDisplayWorkout;
+    index: number;
+  }) => {
+    const isLastItem = index === displayedWorkouts.length - 1;
+    const isCurrent = item.status === "current";
+    const isUpcoming = item.status === "upcoming";
+    const isCompleted = item.status === "completed";
+    const isStartableCurrent =
+      item.id === currentWorkoutId && item.status === "current";
+
+    const rowContent = (
+      <>
+        <View style={styles.timelineColumn}>
+          {!isLastItem && <View style={styles.timelineLine} />}
+          <View
+            style={[
+              styles.timelineDot,
+              isCurrent && styles.timelineDotActive,
+              isUpcoming && styles.timelineDotUpcoming,
+              isCompleted && styles.timelineDotCompleted,
+            ]}
+          >
+            {isCurrent && <View style={styles.timelineDotInner} />}
+            {isCompleted && (
+              <Check color="#FFFFFF" size={10} strokeWidth={3} />
+            )}
+          </View>
+        </View>
+
+        <View style={styles.activityTextBlock}>
+          <View style={styles.activityTitleRow}>
+            <Text
+              numberOfLines={2}
+              style={[
+                styles.activityTitle,
+                isUpcoming && styles.activityTitleInactive,
+                isCompleted && styles.activityTitleCompleted,
+              ]}
+            >
+              {item.title}
+            </Text>
+
+            <View
+              style={[
+                styles.activityIconBadge,
+                isUpcoming && styles.activityIconBadgeUpcoming,
+              ]}
+            >
+              {item.icon === "run" ? (
+                <PersonStanding
+                  size={14}
+                  color={colors.homeDark}
+                  strokeWidth={2.2}
+                />
+              ) : (
+                <Dumbbell
+                  size={14}
+                  color={colors.homeDark}
+                  strokeWidth={2.2}
+                />
+              )}
+            </View>
+          </View>
+          <Text
+            numberOfLines={4}
+            ellipsizeMode="tail"
+            style={[
+              styles.activityDetail,
+              isUpcoming && styles.activityDetailInactive,
+              isCompleted && styles.activityDetailCompleted,
+            ]}
+          >
+            {item.subtitle}
+          </Text>
+
+          {isCompleted && (
+            <Text style={styles.historyLinkText}>Completed</Text>
+          )}
+        </View>
+
+        {isCurrent && isStartableCurrent && (
+          <Pressable
+            style={styles.startButton}
+            onPress={() => openWorkout(item)}
+            accessibilityRole="button"
+            accessibilityLabel={`Start ${item.title}`}
+          >
+            <Text style={styles.startText}>Start</Text>
+            <View style={styles.startArrow} />
+          </Pressable>
+        )}
+
+        {isCompleted && (
+          <View style={styles.completedBadge}>
+            <Check color={colors.homeDark} size={16} strokeWidth={3} />
+          </View>
+        )}
+      </>
+    );
+
+    if (!isCurrent) {
+      return (
+        <Pressable
+          onPress={() => openWorkout(item)}
+          style={[styles.scheduleRow, isUpcoming && styles.scheduleRowUpcoming]}
+        >
+          {rowContent}
+        </Pressable>
+      );
+    }
+
+    return (
+      <View style={[styles.scheduleRow, isUpcoming && styles.scheduleRowUpcoming]}>
+        {rowContent}
+      </View>
+    );
   };
 
   // Allows the bottom sheet to be dismissed with a downward drag while snapping back open on small gestures.
@@ -365,134 +605,40 @@ export default function HomeScreen() {
         <Text style={styles.activityLabel}>Today{"'"}s Activity</Text>
 
         <View style={styles.scheduleList}>
-          {/* Current vs upcoming rendering stays temporary here so only the active workout is startable from Home. */}
-            {hasTodayActivities ? (
-              todayActivities.map((item, index) => {
-              const isLastItem = index === todayActivities.length - 1;
-              const isCurrent = item.status === "current";
-              const isUpcoming = item.status === "upcoming";
-              const isCompleted = item.status === "completed";
-              const isStartableCurrent =
-                item.id === currentWorkoutId && item.status === "current";
+          {workoutLoadError ? (
+            <Text style={styles.workoutFallbackNotice}>{workoutLoadError}</Text>
+          ) : null}
 
-              const rowContent = (
-                <>
-                  <View style={styles.timelineColumn}>
-                    {!isLastItem && <View style={styles.timelineLine} />}
-                    <View
-                      style={[
-                        styles.timelineDot,
-                        isCurrent && styles.timelineDotActive,
-                        isUpcoming && styles.timelineDotUpcoming,
-                        isCompleted && styles.timelineDotCompleted,
-                      ]}
-                    >
-                      {isCurrent && <View style={styles.timelineDotInner} />}
-                      {isCompleted && (
-                        <Check color="#FFFFFF" size={10} strokeWidth={3} />
-                      )}
-                    </View>
-                  </View>
-
-                  <View style={styles.activityTextBlock}>
-                    <View style={styles.activityTitleRow}>
-                      <Text
-                        style={[
-                          styles.activityTitle,
-                          isUpcoming && styles.activityTitleInactive,
-                          isCompleted && styles.activityTitleCompleted,
-                        ]}
-                      >
-                        {item.title}
-                      </Text>
-
-                      <View
-                        style={[
-                          styles.activityIconBadge,
-                          isUpcoming && styles.activityIconBadgeUpcoming,
-                        ]}
-                      >
-                        {item.icon === "run" ? (
-                          <PersonStanding
-                            size={14}
-                            color={colors.homeDark}
-                            strokeWidth={2.2}
-                          />
-                        ) : (
-                          <Dumbbell
-                            size={14}
-                            color={colors.homeDark}
-                            strokeWidth={2.2}
-                          />
-                        )}
-                      </View>
-                    </View>
-                    <Text
-                      style={[
-                        styles.activityDetail,
-                        isUpcoming && styles.activityDetailInactive,
-                        isCompleted && styles.activityDetailCompleted,
-                      ]}
-                    >
-                      {item.subtitle}
-                    </Text>
-
-                    {isCompleted && (
-                      <Text style={styles.historyLinkText}>Completed</Text>
-                    )}
-                  </View>
-
-                  {isCurrent && isStartableCurrent && (
-                    <Pressable
-                      style={styles.startButton}
-                      onPress={() => openWorkout(item)}
-                    >
-                      <Text style={styles.startText}>Start</Text>
-                      <View style={styles.startArrow} />
-                    </Pressable>
-                  )}
-
-                  {isCompleted && (
-                    <View style={styles.completedBadge}>
-                      <Check color={colors.homeDark} size={16} strokeWidth={3} />
-                    </View>
-                  )}
-                </>
-              );
-
-              if (isCompleted || isStartableCurrent) {
-                return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => openWorkout(item)}
-                    style={[
-                      styles.scheduleRow,
-                      isUpcoming && styles.scheduleRowUpcoming,
-                    ]}
-                  >
-                    {rowContent}
-                  </Pressable>
-                );
-              }
-
-              return (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.scheduleRow,
-                    isUpcoming && styles.scheduleRowUpcoming,
-                  ]}
-                >
-                  {rowContent}
-                </View>
-              );
-            })
+          {isLoadingWorkouts ? (
+            <View style={styles.loadingStateRow}>
+              <ActivityIndicator color={colors.homeAqua} size="small" />
+              <Text style={styles.loadingStateText}>Loading workouts...</Text>
+            </View>
+          ) : hasTodayActivities ? (
+            <FlatList
+              data={displayedWorkouts}
+              keyExtractor={(item) => item.id}
+              renderItem={renderWorkoutRow}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[
+                styles.scheduleListContent,
+                { paddingBottom: homeBottomInset },
+              ]}
+            />
           ) : (
-            // Home currently shows the empty state until schedule data is connected for the signed-in user.
             <View style={styles.emptyActivityRow}>
-              <Text style={styles.emptyActivityText}>
-                No activities scheduled for today.
-              </Text>
+              <View style={styles.emptyActivityCopy}>
+                <Text style={styles.emptyActivityText}>
+                  {workoutLoadError
+                    ? workoutLoadError
+                    : "No workouts yet. Create one and it will appear here."}
+                </Text>
+                {workoutLoadError ? (
+                  <Text style={styles.emptyActivityHint}>
+                    Home is showing a safe fallback until Supabase is ready.
+                  </Text>
+                ) : null}
+              </View>
               <Pressable
                 onPress={openCreateActivity}
                 style={styles.createActivityButton}
@@ -555,9 +701,9 @@ export default function HomeScreen() {
 
             <View style={styles.sheetList}>
               {hasTodayActivities ? (
-                todayActivities.map((item) => (
+                displayedWorkouts.map((item) => (
                   <View key={`sheet-${item.id}`} style={styles.sheetItem}>
-                      <View
+                    <View
                       style={[
                         styles.sheetIndicator,
                         item.status === "current" && styles.sheetIndicatorActive,
@@ -580,6 +726,148 @@ export default function HomeScreen() {
       </Modal>
     </AppScreen>
   );
+}
+
+function buildScheduledDisplayWorkouts(
+  scheduledWorkouts: ScheduledWorkoutWithPlanRow[],
+  workoutHistory: WorkoutSessionRow[],
+) {
+  const completedScheduledWorkoutIds = new Set<string>();
+  const completedWorkoutPlanIds = new Set<string>();
+
+  workoutHistory.forEach((session) => {
+    if (session.scheduled_workout_id) {
+      completedScheduledWorkoutIds.add(session.scheduled_workout_id);
+    }
+
+    if (session.workout_plan_id) {
+      completedWorkoutPlanIds.add(session.workout_plan_id);
+    }
+  });
+
+  const remainingScheduledWorkouts = scheduledWorkouts
+    .filter((workout) => normalizeScheduledStatus(workout.status) === "scheduled")
+    .filter(
+      (workout) =>
+        !completedScheduledWorkoutIds.has(workout.id) &&
+        !completedWorkoutPlanIds.has(workout.workout_plan_id),
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.scheduled_for).getTime() -
+        new Date(right.scheduled_for).getTime(),
+    );
+
+  return remainingScheduledWorkouts.map((workout, index) =>
+    mapScheduledWorkoutToDisplayWorkout(
+      workout,
+      index === 0 ? "current" : "upcoming",
+    ),
+  );
+}
+
+function mapScheduledWorkoutToDisplayWorkout(
+  workout: ScheduledWorkoutWithPlanRow,
+  status: HomeDisplayWorkout["status"],
+): HomeDisplayWorkout {
+  const workoutPlan = workout.workout_plan;
+  const title = workoutPlan?.title?.trim() || "Scheduled workout";
+  const workoutType = workoutPlan?.workout_type?.trim() || null;
+  const description = workoutPlan?.description?.trim() || "";
+  const route = resolveWorkoutRoute(title, description, workoutType);
+
+  return {
+    id: `scheduled-${workout.id}`,
+    title,
+    subtitle: description || formatWorkoutSubtitle(workoutType, workoutPlan?.duration_seconds),
+    status,
+    route,
+    icon: route === "/workout/map" ? "run" : "strength",
+    workoutPlanId: workout.workout_plan_id,
+    scheduledWorkoutId: workout.id,
+    durationSeconds: workoutPlan?.duration_seconds ?? undefined,
+  };
+}
+
+function mapWorkoutSessionToDisplayWorkout(
+  session: WorkoutSessionRow,
+): HomeDisplayWorkout {
+  const title = session.title?.trim() || "Completed workout";
+  const workoutType = session.workout_type?.trim() || null;
+  const route = resolveWorkoutRoute(title, "", workoutType);
+
+  return {
+    id: `session-${session.id}`,
+    title,
+    subtitle: formatWorkoutSubtitle(workoutType, session.duration_seconds),
+    status: "completed",
+    route,
+    icon: route === "/workout/map" ? "run" : "strength",
+    workoutPlanId: session.workout_plan_id ?? undefined,
+    scheduledWorkoutId: session.scheduled_workout_id ?? undefined,
+    durationSeconds: session.duration_seconds ?? undefined,
+  };
+}
+
+function mapFallbackWorkoutToDisplayWorkout(
+  workout: HomeWorkoutActivity,
+): HomeDisplayWorkout {
+  return {
+    id: workout.id,
+    title: workout.title,
+    subtitle: workout.subtitle,
+    status: workout.status,
+    route: workout.route,
+    icon: workout.icon,
+  };
+}
+
+function normalizeScheduledStatus(status: string | null | undefined) {
+  if (status === "completed" || status === "cancelled" || status === "missed") {
+    return status;
+  }
+
+  return "scheduled";
+}
+
+function resolveWorkoutRoute(
+  title: string,
+  subtitle: string,
+  workoutType?: string | null,
+) {
+  const normalizedContent = `${title} ${subtitle} ${workoutType ?? ""}`
+    .trim()
+    .toLowerCase();
+
+  if (normalizedContent.includes("warm") || normalizedContent.includes("run")) {
+    return "/workout/map" as const;
+  }
+
+  return "/workout/workout" as const;
+}
+
+function formatWorkoutSubtitle(
+  workoutType?: string | null,
+  durationSeconds?: number | null,
+) {
+  const durationLabel =
+    durationSeconds && durationSeconds > 0
+      ? `${Math.max(1, Math.round(durationSeconds / 60))} min`
+      : null;
+
+  if (workoutType && durationLabel) {
+    return `${workoutType} • ${durationLabel}`;
+  }
+
+  if (workoutType) {
+    return workoutType;
+  }
+
+  if (durationLabel) {
+    return durationLabel;
+  }
+
+  return "Workout";
 }
 
 const styles = StyleSheet.create({
@@ -790,7 +1078,31 @@ const styles = StyleSheet.create({
     marginTop: 19,
   },
   scheduleList: {
+    flex: 1,
+    minHeight: 0,
     marginTop: 14,
+  },
+  scheduleListContent: {
+    paddingTop: 4,
+  },
+  loadingStateRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+  },
+  workoutFallbackNotice: {
+    color: "rgba(255,255,255,0.42)",
+    fontFamily: "MontserratAlternates-Regular",
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 10,
+    maxWidth: 312,
+  },
+  loadingStateText: {
+    color: "rgba(255,255,255,0.62)",
+    fontFamily: "MontserratAlternates-Regular",
+    fontSize: 13,
   },
   emptyActivityRow: {
     alignItems: "center",
@@ -799,12 +1111,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 18,
   },
+  emptyActivityCopy: {
+    flex: 1,
+  },
   emptyActivityText: {
     color: "rgba(255,255,255,0.42)",
     flex: 1,
     fontFamily: "MontserratAlternates-Regular",
     fontSize: 13,
     lineHeight: 20,
+  },
+  emptyActivityHint: {
+    color: "rgba(255,255,255,0.3)",
+    fontFamily: "MontserratAlternates-Regular",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
   },
   createActivityButton: {
     alignItems: "center",
@@ -891,6 +1213,8 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.52)",
     fontFamily: "MontserratAlternates-Regular",
     fontSize: 11,
+    flexShrink: 1,
+    lineHeight: 16,
     marginTop: 1,
   },
   activityDetailInactive: {

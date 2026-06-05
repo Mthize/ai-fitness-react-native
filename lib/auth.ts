@@ -12,6 +12,14 @@ import {
 import type { ReactNode } from "react";
 import type { Href } from "expo-router";
 
+import {
+  getCurrentUserProfile,
+  getProfileDisplayValues,
+  markOnboardingCompleted as markProfileOnboardingCompleted,
+  upsertUserProfile,
+} from "@/lib/backend/profile";
+import type { ProfileDisplayFallbackInput, ProfileRow } from "@/lib/backend/types";
+
 export const PRIVATE_HOME_ROUTE = "/home" as const satisfies Href;
 export const LOGIN_ROUTE = "/login" as const satisfies Href;
 export const ONBOARDING_ROUTE = "/onboarding" as const satisfies Href;
@@ -80,6 +88,13 @@ type MetadataUpdatableUser = AuthUserShape & {
 
 export type AuthUserShape = {
   id?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  username?: string | null;
+  imageUrl?: string | null;
+  primaryEmailAddress?: {
+    emailAddress?: string | null;
+  } | null;
   unsafeMetadata?: {
     onboardingCompleted?: unknown;
     onboarding?: OnboardingMetadataShape;
@@ -321,10 +336,38 @@ function formatWeightValue(weight: number | null, weightUnit: WeightUnit) {
   return `${weight} ${weightUnit}`;
 }
 
-// TODO: Replace Clerk metadata-only profile reads with a persisted backend user profile.
-export function getUserProfileDisplayState(
+function convertInchesToCentimeters(value: number | null) {
+  if (!value) {
+    return null;
+  }
+
+  return Math.round(value * 2.54);
+}
+
+function convertPoundsToKilograms(value: number | null) {
+  if (!value) {
+    return null;
+  }
+
+  return Math.round((value / 2.2046226218) * 10) / 10;
+}
+
+function getAuthUserDisplayName(user?: AuthUserShape) {
+  const first = user?.firstName?.trim();
+  const last = user?.lastName?.trim();
+  const fullName = [first, last].filter(Boolean).join(" ").trim();
+
+  return (
+    fullName ||
+    user?.username ||
+    user?.primaryEmailAddress?.emailAddress?.split("@")[0] ||
+    "User"
+  );
+}
+
+function getProfileFallbackFromAuthUser(
   user?: AuthUserShape,
-): UserProfileDisplayState {
+): ProfileDisplayFallbackInput {
   const onboarding = user?.unsafeMetadata?.onboarding;
   const profile = user?.unsafeMetadata?.profile;
   const weight = readOptionalPositiveNumber(onboarding?.weight);
@@ -342,17 +385,53 @@ export function getUserProfileDisplayState(
   });
 
   return {
+    fullName: getAuthUserDisplayName(user),
+    avatarUrl: user?.imageUrl ?? null,
+    unitOfMeasure,
     height,
     heightUnit,
     weight,
     weightUnit,
     gender,
-    unitOfMeasure,
-    displayHeight: formatHeightValue(height, heightUnit),
-    displayWeight: formatWeightValue(weight, weightUnit),
-    displayGender: gender ?? "Not set",
-    displayUnitOfMeasure: unitOfMeasure,
+    onboardingCompleted: getUserOnboardingCompleted(user),
   };
+}
+
+function createProfileUpsertInputFromAuthUser(
+  user: AuthUserShape,
+  onboardingCompleted: boolean,
+) {
+  const fallbackProfile = getProfileFallbackFromAuthUser(user);
+
+  return {
+    clerkUserId: user?.id ?? "",
+    fullName: fallbackProfile.fullName,
+    avatarUrl: fallbackProfile.avatarUrl,
+    unitOfMeasure:
+      fallbackProfile.unitOfMeasure === "Imperial" ? "imperial" : "metric",
+    heightCm:
+      fallbackProfile.heightUnit === "inches"
+        ? convertInchesToCentimeters(fallbackProfile.height)
+        : fallbackProfile.height ?? null,
+    weightKg:
+      fallbackProfile.weightUnit === "lb"
+        ? convertPoundsToKilograms(fallbackProfile.weight)
+        : fallbackProfile.weight ?? null,
+    gender: fallbackProfile.gender,
+    onboardingCompleted,
+  } as const;
+}
+
+export function getUserProfileDisplayState(
+  user?: AuthUserShape,
+  profile?: ProfileRow | null,
+): UserProfileDisplayState {
+  const resolvedProfile = getProfileDisplayValues({
+    profile,
+    fallback: getProfileFallbackFromAuthUser(user),
+  });
+
+  return resolvedProfile;
 }
 
 export function OnboardingProvider({
@@ -486,19 +565,38 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
   const inferredFromProfileData = inferCompletedOnboardingFromMetadata(user);
   const metadataCompleted =
     typeof user?.unsafeMetadata?.onboardingCompleted === "boolean"
-      ? user.unsafeMetadata.onboardingCompleted
+      ? user.unsafeMetadata.onboardingCompleted === true
       : user?.publicMetadata?.onboardingCompleted === true
         ? true
         : inferredFromProfileData
           ? true
           : null;
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(
-    metadataCompleted ?? false,
+    metadataCompleted === true,
   );
   const [isLoading, setIsLoading] = useState(
-    Boolean(userId) && metadataCompleted === null,
+    Boolean(userId) && metadataCompleted !== true,
   );
   const lastMigrationRef = useRef<string | null>(null);
+
+  async function syncSupabaseProfile(
+    authUser: AuthUserShape | undefined,
+    onboardingCompleted: boolean,
+  ) {
+    if (!authUser?.id) {
+      return null;
+    }
+
+    const upsertedProfile = await upsertUserProfile(
+      createProfileUpsertInputFromAuthUser(authUser, onboardingCompleted),
+    );
+
+    if (onboardingCompleted) {
+      await markProfileOnboardingCompleted(authUser.id);
+    }
+
+    return upsertedProfile;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -511,24 +609,24 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
       };
     }
 
-    if (metadataCompleted !== null) {
-      setHasCompletedOnboarding(metadataCompleted);
+    if (metadataCompleted === true) {
+      setHasCompletedOnboarding(true);
       setIsLoading(false);
 
-      if (metadataCompleted) {
-        void setPersistedOnboardingCompleted(userId, true);
+      void setPersistedOnboardingCompleted(userId, true);
 
-        if (
-          lastMigrationRef.current !== userId &&
-          (user?.publicMetadata?.onboardingCompleted !== true ||
-            typeof user?.unsafeMetadata?.onboardingCompleted !== "boolean")
-        ) {
-          lastMigrationRef.current = userId;
-          void tryPersistOnboardingCompletedToPublicMetadata(
-            user as MetadataUpdatableUser,
-          );
-        }
+      if (
+        lastMigrationRef.current !== userId &&
+        (user?.publicMetadata?.onboardingCompleted !== true ||
+          typeof user?.unsafeMetadata?.onboardingCompleted !== "boolean")
+      ) {
+        lastMigrationRef.current = userId;
+        void tryPersistOnboardingCompletedToPublicMetadata(
+          user as MetadataUpdatableUser,
+        );
       }
+
+      void syncSupabaseProfile(user, true);
 
       if (__DEV__) {
         console.log("[ONBOARDING DEBUG] resolved from metadata", {
@@ -538,9 +636,9 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
             public: user?.publicMetadata?.onboardingCompleted ?? null,
           },
           secureStoreKey,
-          secureStoreValue: metadataCompleted ? "true (write-through)" : null,
+          secureStoreValue: "true (write-through)",
           inferredFromProfileData,
-          resolvedOnboardingCompleted: metadataCompleted,
+          resolvedOnboardingCompleted: true,
         });
       }
 
@@ -551,10 +649,48 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
 
     setIsLoading(true);
 
-    // TODO: Replace this per-user device fallback with a persisted backend
-    // onboarding-complete field when the profile backend is wired.
-    void SecureStore.getItemAsync(getOnboardingStorageKey(userId))
-      .then((value) => {
+    // TODO: Remove temporary Clerk/SecureStore onboarding fallback once
+    // Supabase profile.onboarding_completed is the source of truth.
+    void (async () => {
+      const persistedProfile = await getCurrentUserProfile(userId);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (persistedProfile?.onboarding_completed) {
+        setHasCompletedOnboarding(true);
+        setIsLoading(false);
+        void setPersistedOnboardingCompleted(userId, true);
+
+        if (lastMigrationRef.current !== userId && user) {
+          lastMigrationRef.current = userId;
+          void tryPersistOnboardingCompletedToPublicMetadata(
+            user as MetadataUpdatableUser,
+          );
+          void syncSupabaseProfile(user, true);
+        }
+
+        if (__DEV__) {
+          console.log("[ONBOARDING DEBUG] resolved from supabase profile", {
+            userId,
+            clerkMetadataOnboardingValue: {
+              unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
+              public: user?.publicMetadata?.onboardingCompleted ?? null,
+            },
+            secureStoreKey,
+            secureStoreValue: "true (write-through)",
+            inferredFromProfileData,
+            resolvedOnboardingCompleted: true,
+          });
+        }
+
+        return;
+      }
+
+      try {
+        const value = await SecureStore.getItemAsync(getOnboardingStorageKey(userId));
+
         if (cancelled) {
           return;
         }
@@ -587,9 +723,9 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
           void tryPersistOnboardingCompletedToPublicMetadata(
             user as MetadataUpdatableUser,
           );
+          void syncSupabaseProfile(user, true);
         }
-      })
-      .catch(() => {
+      } catch {
         if (cancelled) {
           return;
         }
@@ -610,12 +746,13 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
             resolvedOnboardingCompleted: false,
           });
         }
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [metadataCompleted, userId]);
+  }, [metadataCompleted, secureStoreKey, user, userId]);
 
   return { hasCompletedOnboarding, isLoading };
 }

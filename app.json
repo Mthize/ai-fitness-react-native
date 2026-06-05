@@ -42,7 +42,8 @@
       "expo-web-browser",
       "expo-secure-store",
       "react-native-health",
-      "expo-audio"
+      "expo-audio",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

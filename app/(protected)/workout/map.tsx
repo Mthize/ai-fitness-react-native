@@ -188,11 +188,16 @@ function StatsPanelShape() {
 export default function MapWorkoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const { mode, title } = useLocalSearchParams<{
+    mode?: string;
+    title?: string;
+  }>();
   const [isPaused, setIsPaused] = useState(false);
   const isHistoryMode = mode === "history";
+  const workoutTitle = title?.trim() || MOCK_WORKOUT.mapTitle;
 
   // TODO: Replace history mode mock details with persisted completed workout session data.
+  // TODO: When WarmUp has a real finish action, persist it with completeWorkoutSession() instead of faking completion here.
 
   // Keeps the fallback safe because this screen can be opened directly during testing.
   const handleBackPress = () => {
@@ -232,10 +237,8 @@ export default function MapWorkoutScreen() {
 
           <View style={styles.workoutHeaderCard}>
             <View style={styles.headerTextWrap}>
-              <Text style={styles.workoutTitle}>{MOCK_WORKOUT.mapTitle}</Text>
-              <Text style={styles.workoutSubtitle}>
-                {MOCK_WORKOUT.mapSubtitle}
-              </Text>
+              <Text style={styles.workoutTitle}>{workoutTitle}</Text>
+              <Text style={styles.workoutSubtitle}>{MOCK_WORKOUT.mapSubtitle}</Text>
             </View>
 
             <View style={styles.activityIconCircle}>

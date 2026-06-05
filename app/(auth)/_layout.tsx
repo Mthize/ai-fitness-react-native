@@ -5,8 +5,6 @@ import { useAuth, useClerk, useUser } from "@/lib/clerk";
 import { ONBOARDING_ROUTE, PRIVATE_HOME_ROUTE, useResolvedOnboardingCompletion } from "@/lib/auth";
 import { useSessionActivationState } from "@/lib/session-activation";
 
-console.log("[TEMP AUTH DEBUG][auth layout] module evaluated");
-
 export default function AuthLayout() {
   const { isLoaded, isSignedIn } = useAuth();
   const clerk = useClerk();

@@ -165,3 +165,8 @@ Every prompt for Codex or Gemini should start with:
 - Do not introduce new fonts.
 - Do not change global font setup unless explicitly asked.
 - When editing existing code, replace Poppins usage with the closest Montserrat Alternates equivalent.
+
+## Workout Reminder Visibility Rule
+
+- Do not show reminder timing copy like `Reminder 15 min before` in user-facing workout cards, schedule cards, Home cards, sheets, or list rows unless the user explicitly asks for reminder timing to be visible.
+- Reminder state and reminder scheduling logic may still exist in the data layer or edit flows, but the timing label should stay hidden from normal card UI by default.

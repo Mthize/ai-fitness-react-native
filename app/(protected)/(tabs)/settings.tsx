@@ -20,6 +20,12 @@ import {
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
 import { getUserProfileDisplayState } from "@/lib/auth";
+import {
+  getCurrentUserProfile,
+  getProfileDisplayValues,
+  upsertUserProfile,
+} from "@/lib/backend/profile";
+import type { ProfileRow } from "@/lib/backend/types";
 import { useAuth, useUser } from "@/lib/clerk";
 
 const NEUTRAL_SWITCH_TRACK = "rgba(255,255,255,0.16)";
@@ -63,8 +69,31 @@ type EditableUserMethods = {
 export default function SettingsScreen() {
   const { signOut } = useAuth();
   const { user } = useUser();
-  const profile = getUserProfileDisplayState(user);
+  const fallbackProfile = getUserProfileDisplayState(user);
   const editableUser = user as (NonNullable<typeof user> & EditableUserMethods) | null;
+  const first = user?.firstName?.trim();
+  const last = user?.lastName?.trim();
+  const fullName = [first, last].filter(Boolean).join(" ").trim();
+  const fallbackDisplayName =
+    fullName ||
+    user?.username ||
+    user?.primaryEmailAddress?.emailAddress?.split("@")[0] ||
+    "User";
+  const [persistedProfile, setPersistedProfile] = useState<ProfileRow | null>(null);
+  const profile = getProfileDisplayValues({
+    profile: persistedProfile,
+    fallback: {
+      fullName: fallbackDisplayName,
+      avatarUrl: user?.imageUrl ?? null,
+      unitOfMeasure: fallbackProfile.unitOfMeasure,
+      height: fallbackProfile.height,
+      heightUnit: fallbackProfile.heightUnit,
+      weight: fallbackProfile.weight,
+      weightUnit: fallbackProfile.weightUnit,
+      gender: fallbackProfile.gender,
+      onboardingCompleted: fallbackProfile.onboardingCompleted,
+    },
+  });
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [appleWatchEnabled, setAppleWatchEnabled] = useState(false);
@@ -85,14 +114,7 @@ export default function SettingsScreen() {
     isGenderOption(profile.gender) ? profile.gender : null,
   );
 
-  const first = user?.firstName?.trim();
-  const last = user?.lastName?.trim();
-  const fullName = [first, last].filter(Boolean).join(" ").trim();
-  const displayName =
-    fullName ||
-    user?.username ||
-    user?.primaryEmailAddress?.emailAddress?.split("@")[0] ||
-    "User";
+  const displayName = profile.fullName || fallbackDisplayName;
   const initials =
     displayName
       .split(/\s+/)
@@ -118,10 +140,42 @@ export default function SettingsScreen() {
     setGenderInput(isGenderOption(profile.gender) ? profile.gender : null);
   }, [profile.gender]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!user?.id) {
+      setPersistedProfile(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void getCurrentUserProfile(user.id).then((nextProfile) => {
+      if (!cancelled) {
+        setPersistedProfile(nextProfile);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
   async function reloadUser() {
     if (typeof editableUser?.reload === "function") {
       await editableUser.reload();
     }
+  }
+
+  async function refreshPersistedProfile() {
+    if (!user?.id) {
+      setPersistedProfile(null);
+      return null;
+    }
+
+    const nextProfile = await getCurrentUserProfile(user.id);
+    setPersistedProfile(nextProfile);
+    return nextProfile;
   }
 
   async function persistOnboardingProfile(partial: Record<string, unknown>) {
@@ -148,6 +202,36 @@ export default function SettingsScreen() {
     });
 
     await reloadUser();
+  }
+
+  async function syncProfileToBackend(overrides?: {
+    fullName?: string | null;
+    avatarUrl?: string | null;
+    heightCm?: number | null;
+    weightKg?: number | null;
+    gender?: string | null;
+  }) {
+    if (!user?.id) {
+      return null;
+    }
+
+    const nextProfile = await upsertUserProfile({
+      clerkUserId: user.id,
+      fullName: overrides?.fullName ?? displayName,
+      avatarUrl: overrides?.avatarUrl ?? user.imageUrl ?? null,
+      unitOfMeasure: profile.unitOfMeasure === "Imperial" ? "imperial" : "metric",
+      heightCm: overrides?.heightCm ?? profile.heightCm,
+      weightKg: overrides?.weightKg ?? profile.weightKg,
+      gender: overrides?.gender ?? profile.gender,
+      onboardingCompleted: profile.onboardingCompleted,
+    });
+
+    if (nextProfile) {
+      setPersistedProfile(nextProfile);
+      return nextProfile;
+    }
+
+    return refreshPersistedProfile();
   }
 
   function closeModal() {
@@ -225,6 +309,9 @@ export default function SettingsScreen() {
         lastName: trimmedLastName || undefined,
       });
       await reloadUser();
+      await syncProfileToBackend({
+        fullName: [trimmedFirstName, trimmedLastName].filter(Boolean).join(" ").trim(),
+      });
       setActiveModal(null);
     } catch (error) {
       console.warn("[settings] Failed to update name.", error);
@@ -247,6 +334,12 @@ export default function SettingsScreen() {
     try {
       await persistOnboardingProfile({
         weight: Math.round(parsedWeight * 10) / 10,
+      });
+      await syncProfileToBackend({
+        weightKg:
+          profile.unitOfMeasure === "Imperial"
+            ? Math.round((parsedWeight / 2.2046226218) * 10) / 10
+            : Math.round(parsedWeight * 10) / 10,
       });
       setActiveModal(null);
     } catch (error) {
@@ -271,6 +364,12 @@ export default function SettingsScreen() {
       await persistOnboardingProfile({
         height: Math.round(parsedHeight),
       });
+      await syncProfileToBackend({
+        heightCm:
+          profile.unitOfMeasure === "Imperial"
+            ? Math.round(parsedHeight * 2.54)
+            : Math.round(parsedHeight),
+      });
       setActiveModal(null);
     } catch (error) {
       console.warn("[settings] Failed to update height.", error);
@@ -290,6 +389,9 @@ export default function SettingsScreen() {
 
     try {
       await persistOnboardingProfile({
+        gender: genderInput,
+      });
+      await syncProfileToBackend({
         gender: genderInput,
       });
       setActiveModal(null);
@@ -351,6 +453,7 @@ export default function SettingsScreen() {
 
       await setProfileImage({ file });
       await reloadUser();
+      await refreshPersistedProfile();
     } catch (error) {
       console.warn("[settings] Failed to change profile picture.", error);
       Alert.alert(
@@ -386,6 +489,7 @@ export default function SettingsScreen() {
               try {
                 await setProfileImage({ file: null });
                 await reloadUser();
+                await refreshPersistedProfile();
               } catch (error) {
                 console.warn("[settings] Failed to delete profile picture.", error);
                 Alert.alert(
