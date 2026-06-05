@@ -127,7 +127,7 @@ export default function ProtectedTabsLayout() {
   const { isLoaded, isSignedIn } = useAuth();
   const clerk = useClerk();
   const { user } = useUser();
-  const { pending, sessionId } = useSessionActivationState();
+  const { pending } = useSessionActivationState();
   const userId = user?.id ?? null;
   const clerkSessionId = clerk.session?.id ?? null;
   const hasActiveClerkSession = Boolean(userId && clerkSessionId);
@@ -139,15 +139,6 @@ export default function ProtectedTabsLayout() {
 
   // Keep redirects centralized here so tabs never mount for signed-out or not-yet-onboarded users.
   let redirectTarget: string | null = null;
-  const routeDecision = !isLoaded
-    ? "loading-auth"
-    : isResolvedSignedIn && isOnboardingStatusLoading
-      ? "loading-onboarding"
-      : !isResolvedSignedIn
-        ? LOGIN_ROUTE
-        : !onboardingCompleted
-          ? ONBOARDING_ROUTE
-          : "allow-tabs";
 
   if (isLoaded) {
     if (!isResolvedSignedIn) {
@@ -155,25 +146,6 @@ export default function ProtectedTabsLayout() {
     } else if (!onboardingCompleted) {
       redirectTarget = ONBOARDING_ROUTE;
     }
-  }
-
-  if (__DEV__) {
-    console.log("[ONBOARDING ROUTING][tabs]", {
-      signedInStatus: isSignedIn,
-      userId,
-      clerkSessionId,
-      hasActiveClerkSession,
-      isResolvedSignedIn,
-      clerkMetadataOnboardingValue: {
-        unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
-        public: user?.publicMetadata?.onboardingCompleted ?? null,
-      },
-      secureStoreKey: userId ? `onboarding_completed_${userId}` : null,
-      resolvedOnboardingCompleted: onboardingCompleted,
-      finalRoute: routeDecision,
-      pendingActivation: pending,
-      pendingSessionId: sessionId,
-    });
   }
 
   if (!isLoaded || pending || (isResolvedSignedIn && isOnboardingStatusLoading)) {

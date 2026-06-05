@@ -115,20 +115,6 @@ export default function GoalScreen() {
       await setPersistedOnboardingCompleted(user.id, true);
       await user.reload();
 
-      if (__DEV__) {
-        console.log("[ONBOARDING DEBUG] completion persisted", {
-          userId: user.id,
-          secureStoreKey: `onboarding_completed_${user.id}`,
-          secureStoreValue: "true",
-          publicMetadataValue:
-            user.publicMetadata?.onboardingCompleted ?? null,
-          unsafeMetadataValue:
-            user.unsafeMetadata?.onboardingCompleted ?? null,
-          supabaseProfileUpserted: true,
-          routeDecision: PRIVATE_HOME_ROUTE,
-        });
-      }
-
       markOnboardingCompleted();
       router.replace(PRIVATE_HOME_ROUTE);
     } catch (error) {

@@ -202,7 +202,6 @@ export default function OTPVerificationScreen() {
   }
 
   async function handleVerify() {
-    console.log("[TEMP AUTH DEBUG] otp submit");
     setHasSubmitted(true);
     setFormError(null);
     setSuccessMessage(null);
@@ -218,39 +217,18 @@ export default function OTPVerificationScreen() {
           code,
         });
 
-        console.log(
-          "[TEMP AUTH DEBUG] otp verification status",
-          completeSignUp.status,
-        );
-        console.log(
-          "[TEMP AUTH DEBUG] otp createdSessionId",
-          completeSignUp.createdSessionId,
-        );
-        console.log(
-          "[TEMP AUTH DEBUG] otp email verification status",
-          completeSignUp.verifications.emailAddress.status,
-        );
-
         if (
           completeSignUp.status === "complete" &&
           completeSignUp.createdSessionId
         ) {
-          console.log("[TEMP AUTH DEBUG] calling setActive");
           markSessionActivationPending(completeSignUp.createdSessionId);
           await setActive({
             session: completeSignUp.createdSessionId,
             navigate: async () => {
-              console.log("[TEMP AUTH DEBUG] otp setActive navigate callback");
               await new Promise((resolve) => setTimeout(resolve, 100));
-              console.log("[TEMP AUTH DEBUG] redirecting /");
               router.replace("/");
             },
           });
-          console.log("[TEMP AUTH DEBUG] otp setActive complete");
-          console.log(
-            "[TEMP AUTH DEBUG] current session id",
-            completeSignUp.createdSessionId,
-          );
           return;
         }
 

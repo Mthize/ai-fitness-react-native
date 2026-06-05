@@ -159,9 +159,7 @@ export default function ScheduleScreen() {
   const loadScheduledWorkouts = useCallback(async () => {
     if (!user?.id) {
       setScheduledWorkouts([]);
-      setLoadError(
-        "Your workout schedule will appear here once your signed-in profile is ready.",
-      );
+      setLoadError(null);
       setIsLoading(false);
       return;
     }
@@ -668,7 +666,9 @@ export default function ScheduleScreen() {
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>
-                  {hasAnySchedules ? "No workouts for this day." : "No schedules yet."}
+                  {hasAnySchedules
+                    ? "No workouts scheduled for this day."
+                    : "No workouts scheduled for this day."}
                 </Text>
                 <Text style={styles.emptyDescription}>
                   {hasAnySchedules

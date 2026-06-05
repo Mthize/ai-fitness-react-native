@@ -237,6 +237,8 @@ export async function createWorkoutPlan(
       throw scheduledWorkoutError;
     }
 
+    emitScheduledWorkoutChange();
+
     return {
       workoutPlan: createdWorkoutPlan,
       scheduledWorkout: scheduledWorkout as ScheduledWorkoutRow,

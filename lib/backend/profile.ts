@@ -79,11 +79,6 @@ export async function upsertUserProfile(input: UpsertProfileInput) {
       onboarding_completed: input.onboardingCompleted ?? false,
     };
 
-    if (__DEV__) {
-      const { data, error } = await supabase.rpc("debug_auth_context");
-      console.log("[Supabase Auth Debug]", { data, error });
-    }
-
     const { data, error } = await supabase
       .from("profiles")
       .upsert(payload, {

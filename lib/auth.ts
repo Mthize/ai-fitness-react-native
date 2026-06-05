@@ -549,7 +549,7 @@ async function tryPersistOnboardingCompletedToPublicMetadata(
     return true;
   } catch (error) {
     if (__DEV__) {
-      console.log("[ONBOARDING DEBUG] publicMetadata persist skipped", {
+      console.warn("[auth] Failed to persist onboarding public metadata.", {
         userId: user.id,
         error,
       });
@@ -628,20 +628,6 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
 
       void syncSupabaseProfile(user, true);
 
-      if (__DEV__) {
-        console.log("[ONBOARDING DEBUG] resolved from metadata", {
-          userId,
-          clerkMetadataOnboardingValue: {
-            unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
-            public: user?.publicMetadata?.onboardingCompleted ?? null,
-          },
-          secureStoreKey,
-          secureStoreValue: "true (write-through)",
-          inferredFromProfileData,
-          resolvedOnboardingCompleted: true,
-        });
-      }
-
       return () => {
         cancelled = true;
       };
@@ -671,20 +657,6 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
           void syncSupabaseProfile(user, true);
         }
 
-        if (__DEV__) {
-          console.log("[ONBOARDING DEBUG] resolved from supabase profile", {
-            userId,
-            clerkMetadataOnboardingValue: {
-              unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
-              public: user?.publicMetadata?.onboardingCompleted ?? null,
-            },
-            secureStoreKey,
-            secureStoreValue: "true (write-through)",
-            inferredFromProfileData,
-            resolvedOnboardingCompleted: true,
-          });
-        }
-
         return;
       }
 
@@ -699,20 +671,6 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
 
         setHasCompletedOnboarding(resolvedOnboardingCompleted);
         setIsLoading(false);
-
-        if (__DEV__) {
-          console.log("[ONBOARDING DEBUG] resolved from fallback", {
-            userId,
-            clerkMetadataOnboardingValue: {
-              unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
-              public: user?.publicMetadata?.onboardingCompleted ?? null,
-            },
-            secureStoreKey,
-            secureStoreValue: value,
-            inferredFromProfileData,
-            resolvedOnboardingCompleted,
-          });
-        }
 
         if (
           resolvedOnboardingCompleted &&
@@ -734,16 +692,8 @@ export function useResolvedOnboardingCompletion(user?: AuthUserShape) {
         setIsLoading(false);
 
         if (__DEV__) {
-          console.log("[ONBOARDING DEBUG] fallback read failed", {
+          console.warn("[auth] Failed to read onboarding fallback state.", {
             userId,
-            clerkMetadataOnboardingValue: {
-              unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
-              public: user?.publicMetadata?.onboardingCompleted ?? null,
-            },
-            secureStoreKey,
-            secureStoreValue: null,
-            inferredFromProfileData,
-            resolvedOnboardingCompleted: false,
           });
         }
       }

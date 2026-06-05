@@ -9,7 +9,7 @@ export default function AuthLayout() {
   const { isLoaded, isSignedIn } = useAuth();
   const clerk = useClerk();
   const { user } = useUser();
-  const { pending, sessionId } = useSessionActivationState();
+  const { pending } = useSessionActivationState();
   const userId = user?.id ?? null;
   const clerkSessionId = clerk.session?.id ?? null;
   const hasActiveClerkSession = Boolean(userId && clerkSessionId);
@@ -21,34 +21,6 @@ export default function AuthLayout() {
   const redirectTarget = hasCompletedOnboarding
     ? PRIVATE_HOME_ROUTE
     : ONBOARDING_ROUTE;
-  const routeDecision = !isLoaded
-    ? "loading-auth"
-    : isResolvedSignedIn && isOnboardingStatusLoading
-      ? "loading-onboarding"
-      : isResolvedSignedIn
-        ? redirectTarget
-        : pending
-          ? "loading-pending-activation"
-          : "auth-stack";
-
-  if (__DEV__) {
-    console.log("[ONBOARDING ROUTING][auth layout]", {
-      signedInStatus: isSignedIn,
-      userId,
-      clerkSessionId,
-      hasActiveClerkSession,
-      isResolvedSignedIn,
-      clerkMetadataOnboardingValue: {
-        unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
-        public: user?.publicMetadata?.onboardingCompleted ?? null,
-      },
-      secureStoreKey: userId ? `onboarding_completed_${userId}` : null,
-      resolvedOnboardingCompleted: hasCompletedOnboarding,
-      finalRoute: routeDecision,
-      pendingActivation: pending,
-      pendingSessionId: sessionId,
-    });
-  }
 
   if (!isLoaded || pending || (isResolvedSignedIn && isOnboardingStatusLoading)) {
     return <RouteStatusScreen title="Loading session..." />;

@@ -74,15 +74,6 @@ export default function LoginSignUpScreen() {
   const isLoginDisabled =
     isSubmitting || isActivatingSession || !isSignInLoaded || !isFormValid;
 
-  console.log("[TEMP AUTH DEBUG][login render] email", emailAddress);
-  console.log("[TEMP AUTH DEBUG][login render] password length", password.length);
-  console.log("[TEMP AUTH DEBUG][login render] loading", isSubmitting);
-  console.log(
-    "[TEMP AUTH DEBUG][login render] activating session",
-    isActivatingSession,
-  );
-  console.log("[TEMP AUTH DEBUG][login render] isDisabled", isLoginDisabled);
-
   if (!isAuthLoaded) {
     return null;
   }
@@ -101,7 +92,6 @@ export default function LoginSignUpScreen() {
       return;
     }
 
-    console.log("[TEMP AUTH DEBUG] login submit");
     setHasSubmitted(true);
     setFormError(null);
     setIsSubmitting(true);
@@ -124,41 +114,19 @@ export default function LoginSignUpScreen() {
         password,
       });
 
-      console.log("[TEMP AUTH DEBUG] signIn status", signInAttempt.status);
-      console.log(
-        "[TEMP AUTH DEBUG] createdSessionId",
-        signInAttempt.createdSessionId,
-      );
-      console.log(
-        "[TEMP AUTH DEBUG] supportedFirstFactors",
-        signInAttempt.supportedFirstFactors,
-      );
-      console.log(
-        "[TEMP AUTH DEBUG] firstFactorVerification",
-        signInAttempt.firstFactorVerification,
-      );
-
       if (
         signInAttempt.status === "complete" &&
         signInAttempt.createdSessionId
       ) {
-        console.log("[TEMP AUTH DEBUG] calling setActive");
         setIsActivatingSession(true);
         markSessionActivationPending(signInAttempt.createdSessionId);
         await setActive({
           session: signInAttempt.createdSessionId,
           navigate: async () => {
-            console.log("[TEMP AUTH DEBUG] setActive navigate callback");
             await new Promise((resolve) => setTimeout(resolve, 100));
-            console.log("[TEMP AUTH DEBUG] redirecting /");
             router.replace("/");
           },
         });
-        console.log("[TEMP AUTH DEBUG] setActive complete");
-        console.log(
-          "[TEMP AUTH DEBUG] current session id",
-          clerk.session?.id ?? signInAttempt.createdSessionId,
-        );
         return;
       }
 
@@ -203,25 +171,15 @@ export default function LoginSignUpScreen() {
         await startSSOFlow({ strategy });
 
       if (createdSessionId) {
-        console.log("[TEMP AUTH DEBUG] signIn status", "complete");
-        console.log("[TEMP AUTH DEBUG] createdSessionId", createdSessionId);
-        console.log("[TEMP AUTH DEBUG] calling setActive");
         setIsActivatingSession(true);
         markSessionActivationPending(createdSessionId);
         await setActive({
           session: createdSessionId,
           navigate: async () => {
-            console.log("[TEMP AUTH DEBUG] setActive navigate callback");
             await new Promise((resolve) => setTimeout(resolve, 100));
-            console.log("[TEMP AUTH DEBUG] redirecting /");
             router.replace("/");
           },
         });
-        console.log("[TEMP AUTH DEBUG] setActive complete");
-        console.log(
-          "[TEMP AUTH DEBUG] current session id",
-          clerk.session?.id ?? createdSessionId,
-        );
         return;
       }
 

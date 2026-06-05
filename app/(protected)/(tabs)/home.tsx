@@ -20,10 +20,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LineChart } from "react-native-gifted-charts";
 
 import { AppScreen } from "@/components/AppScreen";
-import {
-  type HomeWorkoutActivity,
-  useWorkoutProgress,
-} from "@/components/workout/workoutData";
 import { colors } from "@/constants/colors";
 import type {
   ScheduledWorkoutWithPlanRow,
@@ -99,10 +95,6 @@ export default function HomeScreen() {
   const markerLeft = chartSpacing * selectedDayIndex;
   const markerTop =
     chartHeight - (selectedCalories / chartMaxValue) * chartHeight;
-  const {
-    activities: fallbackActivities,
-    currentWorkoutId: fallbackCurrentWorkoutId,
-  } = useWorkoutProgress(user?.id);
   // Keep the sheet partially off-screen until it is opened so the modal only reveals the lower schedule panel.
   const sheetClosedOffset = Math.max(screenHeight * 0.42, 320);
   const sheetTranslateY = useRef(new Animated.Value(sheetClosedOffset)).current;
@@ -191,9 +183,7 @@ export default function HomeScreen() {
     if (!user?.id) {
       setScheduledWorkouts([]);
       setWorkoutHistory([]);
-      setWorkoutLoadError(
-        "Your workout data will appear here once your signed-in profile is ready.",
-      );
+      setWorkoutLoadError(null);
       setIsLoadingWorkouts(false);
       return;
     }
@@ -216,7 +206,7 @@ export default function HomeScreen() {
       setScheduledWorkouts([]);
       setWorkoutHistory([]);
       setWorkoutLoadError(
-        "Saved workouts are not available right now. Supabase or row permissions may still be configuring.",
+        "Saved workouts are not available right now. Please try again.",
       );
     } finally {
       setIsLoadingWorkouts(false);
@@ -248,21 +238,18 @@ export default function HomeScreen() {
     [completedDisplayWorkouts, scheduledDisplayWorkouts],
   );
 
-  const displayedWorkouts = useMemo<HomeDisplayWorkout[]>(() => {
-    if (workoutLoadError) {
-      return fallbackActivities.map(mapFallbackWorkoutToDisplayWorkout);
-    }
-
-    return backendDisplayWorkouts;
-  }, [backendDisplayWorkouts, fallbackActivities, workoutLoadError]);
+  const displayedWorkouts = useMemo<HomeDisplayWorkout[]>(
+    () => backendDisplayWorkouts,
+    [backendDisplayWorkouts],
+  );
 
   const currentWorkoutId = useMemo(() => {
     const currentWorkout = displayedWorkouts.find(
       (workout) => workout.status === "current",
     );
 
-    return currentWorkout?.id ?? fallbackCurrentWorkoutId;
-  }, [displayedWorkouts, fallbackCurrentWorkoutId]);
+    return currentWorkout?.id ?? null;
+  }, [displayedWorkouts]);
 
   const hasTodayActivities = displayedWorkouts.length > 0;
 
@@ -629,15 +616,8 @@ export default function HomeScreen() {
             <View style={styles.emptyActivityRow}>
               <View style={styles.emptyActivityCopy}>
                 <Text style={styles.emptyActivityText}>
-                  {workoutLoadError
-                    ? workoutLoadError
-                    : "No workouts yet. Create one and it will appear here."}
+                  {workoutLoadError ? workoutLoadError : "No workouts yet."}
                 </Text>
-                {workoutLoadError ? (
-                  <Text style={styles.emptyActivityHint}>
-                    Home is showing a safe fallback until Supabase is ready.
-                  </Text>
-                ) : null}
               </View>
               <Pressable
                 onPress={openCreateActivity}
@@ -806,19 +786,6 @@ function mapWorkoutSessionToDisplayWorkout(
     workoutPlanId: session.workout_plan_id ?? undefined,
     scheduledWorkoutId: session.scheduled_workout_id ?? undefined,
     durationSeconds: session.duration_seconds ?? undefined,
-  };
-}
-
-function mapFallbackWorkoutToDisplayWorkout(
-  workout: HomeWorkoutActivity,
-): HomeDisplayWorkout {
-  return {
-    id: workout.id,
-    title: workout.title,
-    subtitle: workout.subtitle,
-    status: workout.status,
-    route: workout.route,
-    icon: workout.icon,
   };
 }
 
