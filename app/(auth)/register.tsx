@@ -102,27 +102,6 @@ export default function LoginStepTwoScreen() {
   const isRegisterDisabled =
     isSubmitting || isActivatingSession || !isSignUpLoaded || !isFormValid;
 
-  console.log("[TEMP AUTH DEBUG][register render] username", username);
-  console.log("[TEMP AUTH DEBUG][register render] email", emailAddress);
-  console.log(
-    "[TEMP AUTH DEBUG][register render] password length",
-    password.length,
-  );
-  console.log(
-    "[TEMP AUTH DEBUG][register render] confirmPassword length",
-    confirmPassword.length,
-  );
-  console.log("[TEMP AUTH DEBUG][register render] loading", isSubmitting);
-  console.log(
-    "[TEMP AUTH DEBUG][register render] activating session",
-    isActivatingSession,
-  );
-  console.log("[TEMP AUTH DEBUG][register render] isFormValid", isFormValid);
-  console.log(
-    "[TEMP AUTH DEBUG][register render] isDisabled",
-    isRegisterDisabled,
-  );
-
   if (!isAuthLoaded) {
     return null;
   }
@@ -195,7 +174,7 @@ export default function LoginStepTwoScreen() {
     }
 
     try {
-      const signUpAttempt = await signUp.create({
+      await signUp.create({
         emailAddress: normalizedEmailAddress,
         password,
         unsafeMetadata: {
@@ -203,20 +182,9 @@ export default function LoginStepTwoScreen() {
         },
       });
 
-      console.log("[TEMP AUTH DEBUG] signUp status", signUpAttempt.status);
-      console.log(
-        "[TEMP AUTH DEBUG] signUp createdSessionId",
-        signUpAttempt.createdSessionId,
-      );
-      console.log(
-        "[TEMP AUTH DEBUG] signUp email verification status",
-        signUpAttempt.verifications.emailAddress.status,
-      );
-
       await signUp.prepareEmailAddressVerification({
         strategy: "email_code",
       });
-      console.log("[TEMP AUTH DEBUG] email verification prepared");
     } catch (error) {
       setFormError(
         getReadableErrorMessage(error, "Unable to create your account."),
@@ -245,25 +213,15 @@ export default function LoginStepTwoScreen() {
         await startSSOFlow({ strategy });
 
       if (createdSessionId) {
-        console.log("[TEMP AUTH DEBUG] signUp status", "complete");
-        console.log("[TEMP AUTH DEBUG] signUp createdSessionId", createdSessionId);
-        console.log("[TEMP AUTH DEBUG] calling setActive");
         setIsActivatingSession(true);
         markSessionActivationPending(createdSessionId);
         await setActive({
           session: createdSessionId,
           navigate: async () => {
-            console.log("[TEMP AUTH DEBUG] setActive navigate callback");
             await new Promise((resolve) => setTimeout(resolve, 100));
-            console.log("[TEMP AUTH DEBUG] redirecting /");
             router.replace("/");
           },
         });
-        console.log("[TEMP AUTH DEBUG] setActive complete");
-        console.log(
-          "[TEMP AUTH DEBUG] current session id",
-          clerk.session?.id ?? createdSessionId,
-        );
         return;
       }
 

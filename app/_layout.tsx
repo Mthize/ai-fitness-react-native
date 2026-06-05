@@ -29,11 +29,6 @@ function RootNavigator() {
   const allowProtected = isSignedIn || pending || Boolean(clerkSessionId);
   const allowAuth = !allowProtected;
 
-  console.log("[TEMP AUTH DEBUG][root layout] isLoaded", isLoaded);
-  console.log("[TEMP AUTH DEBUG][root layout] isSignedIn", isSignedIn);
-  console.log("[TEMP AUTH DEBUG][root layout] pending activation", pending);
-  console.log("[TEMP AUTH DEBUG][root layout] clerk session id", clerkSessionId);
-
   if (!isLoaded) {
     return null;
   }

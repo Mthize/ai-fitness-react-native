@@ -20,7 +20,7 @@ export function OnboardingRouteGuard({
   const { isLoaded, isSignedIn } = useAuth();
   const clerk = useClerk();
   const { user } = useUser();
-  const { pending, sessionId } = useSessionActivationState();
+  const { pending } = useSessionActivationState();
   const userId = user?.id ?? null;
   const clerkSessionId = clerk.session?.id ?? null;
   const hasActiveClerkSession = Boolean(userId && clerkSessionId);
@@ -29,36 +29,6 @@ export function OnboardingRouteGuard({
     hasCompletedOnboarding: onboardingCompleted,
     isLoading: isOnboardingStatusLoading,
   } = useResolvedOnboardingCompletion(user);
-  const routeDecision = !isLoaded
-    ? "loading-auth"
-    : isResolvedSignedIn && isOnboardingStatusLoading
-      ? "loading-onboarding"
-      : isResolvedSignedIn && onboardingCompleted
-        ? PRIVATE_HOME_ROUTE
-        : isResolvedSignedIn
-          ? "allow-onboarding"
-          : pending
-            ? "loading-pending-activation"
-            : LOGIN_ROUTE;
-
-  if (__DEV__) {
-    console.log("[ONBOARDING ROUTING][guard]", {
-      signedInStatus: isSignedIn,
-      userId,
-      clerkSessionId,
-      hasActiveClerkSession,
-      isResolvedSignedIn,
-      clerkMetadataOnboardingValue: {
-        unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
-        public: user?.publicMetadata?.onboardingCompleted ?? null,
-      },
-      secureStoreKey: userId ? `onboarding_completed_${userId}` : null,
-      resolvedOnboardingCompleted: onboardingCompleted,
-      finalRoute: routeDecision,
-      pendingActivation: pending,
-      pendingSessionId: sessionId,
-    });
-  }
 
   if (!isLoaded || pending || (isResolvedSignedIn && isOnboardingStatusLoading)) {
     return <RouteStatusScreen title="Loading session..." />;

@@ -1,5 +1,7 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   Activity,
   Check,
@@ -9,11 +11,15 @@ import {
   Footprints,
   Plus,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
+  Modal,
   PanResponder,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -23,16 +29,31 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
+import type { ScheduledWorkoutWithPlanRow } from "@/lib/backend/types";
+import {
+  deleteScheduledWorkout,
+  getScheduledWorkouts,
+  subscribeToScheduledWorkoutChanges,
+} from "@/lib/backend/workouts";
+import { useUser } from "@/lib/clerk";
 
 type ScheduleActivity = {
   id: string;
   title: string;
+  description: string;
   detail: string;
   date: string;
   time?: string;
-  status: "scheduled" | "active" | "completed";
+  scheduledFor: string;
+  status: "scheduled" | "completed" | "cancelled" | "missed";
   source: "user" | "system" | "ai";
   isPremium?: boolean;
+  scheduledWorkoutId: string;
+  workoutPlanId: string;
+  durationSeconds?: number;
+  workoutType?: string | null;
+  reminderEnabled: boolean;
+  reminderMinutesBefore: number;
 };
 
 const weekDayLabels = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -54,11 +75,11 @@ const monthLabels = [
 // These layout constants keep the timeline markers aligned with cards in both collapsed and expanded sheet states.
 const timelineColumnWidth = 24;
 const timelineColumnGap = 12;
-const scheduleCardHeight = 104;
+const scheduleCardHeight = 168;
 const scheduleCardGap = 18;
-const timelineNodeTop = 20;
-
+const timelineNodeTop = 24;
 export default function ScheduleScreen() {
+  const { user } = useUser();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState(() =>
@@ -68,6 +89,16 @@ export default function ScheduleScreen() {
   const [focusedMonth, setFocusedMonth] = useState(() =>
     startOfMonth(toDate(selectedDate)),
   );
+  const [scheduledWorkouts, setScheduledWorkouts] = useState<
+    ScheduledWorkoutWithPlanRow[]
+  >([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [mutatingWorkoutId, setMutatingWorkoutId] = useState<string | null>(null);
+  const [selectedScheduleForActions, setSelectedScheduleForActions] =
+    useState<ScheduleActivity | null>(null);
+  const actionSheetTranslateY = useRef(new Animated.Value(32)).current;
+  const actionSheetOpacity = useRef(new Animated.Value(0)).current;
 
   const selectedDateObject = toDate(selectedDate);
   const visibleDays = useMemo(() => getVisibleDays(focusedMonth), [focusedMonth]);
@@ -82,41 +113,20 @@ export default function ScheduleScreen() {
 
   const normalizedSelectedDateObject = toDate(normalizedSelectedDate);
 
-  // TODO: Replace temporary visual test data with real user-created schedules.
   const scheduleActivities = useMemo<ScheduleActivity[]>(
-    () => [
-      {
-        id: "test-1",
-        title: "WarmUp",
-        detail: "Run 02 km",
-        date: normalizedSelectedDate,
-        time: "8am",
-        status: "scheduled",
-        source: "user",
-      },
-      {
-        id: "test-2",
-        title: "Push up session",
-        detail: "25 reps, 3 sets with 20 sec rest",
-        date: normalizedSelectedDate,
-        time: "4pm",
-        status: "scheduled",
-        source: "user",
-      },
-    ],
-    [normalizedSelectedDate],
+    () => scheduledWorkouts.map(mapScheduledWorkoutToActivity),
+    [scheduledWorkouts],
   );
 
   const selectedActivities = scheduleActivities.filter(
     (activity) => activity.date === normalizedSelectedDate,
   );
+  const sheetBottomInset = Math.max(insets.bottom + 92, 116);
 
+  const hasAnySchedules = scheduleActivities.length > 0;
   const hasSchedules = selectedActivities.length > 0;
   const hasMultipleSchedules = selectedActivities.length > 1;
-  const collapsedActivities = hasSchedules ? selectedActivities.slice(0, 1) : [];
-  const visibleScheduleActivities = isSheetExpanded
-    ? selectedActivities
-    : collapsedActivities;
+  const visibleScheduleActivities = selectedActivities;
 
   const headerDateLabel = formatHeaderDate(normalizedSelectedDateObject);
 
@@ -126,9 +136,9 @@ export default function ScheduleScreen() {
     : Math.max(insets.top + 330, 420);
   const collapsedVisibleHeight = hasSchedules
     ? hasMultipleSchedules
-      ? 470
-      : 380
-    : 270;
+      ? 540
+      : 430
+    : 300;
   const collapsedPanelTop = screenHeight - collapsedVisibleHeight;
   const collapsedTranslate = Math.max(
     collapsedPanelTop - expandedPanelTop,
@@ -146,6 +156,33 @@ export default function ScheduleScreen() {
     ? expandedTranslate
     : collapsedTranslate;
 
+  const loadScheduledWorkouts = useCallback(async () => {
+    if (!user?.id) {
+      setScheduledWorkouts([]);
+      setLoadError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const workouts = await getScheduledWorkouts(user.id);
+      setScheduledWorkouts(workouts);
+    } catch (error) {
+      if (__DEV__) {
+        console.warn("[Schedule] Supabase unavailable or blocked by RLS", error);
+      }
+      setScheduledWorkouts([]);
+      setLoadError(
+        "We couldn't load your saved workouts right now. Please try again.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     if (sheetTranslateYRef.current !== targetTranslate) {
       sheetTranslateY.setValue(targetTranslate);
@@ -157,6 +194,38 @@ export default function ScheduleScreen() {
     expandedTranslateRef.current = expandedTranslate;
     collapsedTranslateRef.current = collapsedTranslate;
   }, [collapsedTranslate, expandedTranslate]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadScheduledWorkouts();
+    }, [loadScheduledWorkouts]),
+  );
+
+  useEffect(() => {
+    return subscribeToScheduledWorkoutChanges(() => {
+      void loadScheduledWorkouts();
+    });
+  }, [loadScheduledWorkouts]);
+
+  useEffect(() => {
+    if (selectedScheduleForActions) {
+      actionSheetTranslateY.setValue(32);
+      actionSheetOpacity.setValue(0);
+
+      Animated.parallel([
+        Animated.timing(actionSheetTranslateY, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(actionSheetOpacity, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [actionSheetOpacity, actionSheetTranslateY, selectedScheduleForActions]);
 
   // Snaps the schedule panel to its expanded or collapsed resting point after taps or drag gestures.
   const snapSheet = (toValue: number) => {
@@ -235,11 +304,13 @@ export default function ScheduleScreen() {
     }
 
     await Haptics.selectionAsync();
+    setSelectedScheduleForActions(null);
     setSelectedDate(dateString);
   };
 
   const handleChangeMonth = async (direction: -1 | 1) => {
     await Haptics.selectionAsync();
+    setSelectedScheduleForActions(null);
 
     // The calendar only renders the first 14 days, so month changes clamp the selected date back into that visible window.
     const nextMonth = addMonths(focusedMonth, direction);
@@ -265,12 +336,130 @@ export default function ScheduleScreen() {
     });
   };
 
+  const handleScheduledWorkoutPress = async (activity: ScheduleActivity) => {
+    await Haptics.selectionAsync();
+
+    router.push({
+      pathname: resolveWorkoutRoute(activity),
+      params: {
+        workoutPlanId: activity.workoutPlanId,
+        scheduledWorkoutId: activity.scheduledWorkoutId,
+        title: activity.title,
+        durationSeconds:
+          activity.durationSeconds != null
+            ? String(activity.durationSeconds)
+            : undefined,
+      },
+    });
+  };
+
+  const handleEditScheduledWorkout = async (activity: ScheduleActivity) => {
+    setSelectedScheduleForActions(null);
+    await Haptics.selectionAsync();
+    router.push({
+      pathname: "/create-activity",
+      params: {
+        returnTo: "schedule",
+        mode: "edit",
+        scheduledWorkoutId: activity.scheduledWorkoutId,
+        workoutPlanId: activity.workoutPlanId,
+        title: activity.title,
+        description: activity.description,
+        scheduledFor: activity.scheduledFor,
+        reminderEnabled: activity.reminderEnabled ? "true" : "false",
+        reminderMinutesBefore: String(activity.reminderMinutesBefore),
+      },
+    });
+  };
+
+  const handleDeleteScheduledWorkout = (activity: ScheduleActivity) => {
+    setSelectedScheduleForActions(null);
+    Alert.alert(
+      "Delete scheduled workout?",
+      "This removes it from your schedule only.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              if (!user?.id) {
+                return;
+              }
+
+              setMutatingWorkoutId(activity.scheduledWorkoutId);
+
+              try {
+                await deleteScheduledWorkout(activity.scheduledWorkoutId, user.id);
+                await loadScheduledWorkouts();
+              } catch (error) {
+                if (__DEV__) {
+                  console.warn("[Schedule] Failed to delete scheduled workout", {
+                    scheduledWorkoutId: activity.scheduledWorkoutId,
+                    error,
+                  });
+                }
+
+                Alert.alert(
+                  "Delete failed",
+                  "We couldn't remove this scheduled workout right now. Please try again.",
+                );
+              } finally {
+                setMutatingWorkoutId(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const closeActionSheet = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(actionSheetTranslateY, {
+        toValue: 32,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+      Animated.timing(actionSheetOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setSelectedScheduleForActions(null);
+    });
+  }, [actionSheetOpacity, actionSheetTranslateY]);
+
+  const handleScheduleCardLongPress = useCallback(
+    async (activity: ScheduleActivity) => {
+      await Haptics.selectionAsync();
+      setSelectedScheduleForActions(activity);
+    },
+    [],
+  );
+
   return (
     <AppScreen
       backgroundColor={colors.appDarkBlue}
       contentStyle={styles.screen}
     >
       <View style={styles.root}>
+        <View
+          pointerEvents="none"
+          style={[
+            styles.sheetBottomFill,
+            {
+              bottom: -insets.bottom,
+              height: Math.max(insets.bottom + 140, 160),
+            },
+          ]}
+        />
+
         <View
           style={[
             styles.topSection,
@@ -399,15 +588,22 @@ export default function ScheduleScreen() {
             </Pressable>
           </View>
 
-          <View
-            style={[
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            onScrollBeginDrag={closeActionSheet}
+            contentContainerStyle={[
               styles.sheetContent,
               {
-                paddingBottom: Math.max(insets.bottom + 240, 240),
+                paddingBottom: sheetBottomInset,
               },
             ]}
           >
-            {hasSchedules ? (
+            {isLoading ? (
+              <View style={styles.statusState}>
+                <ActivityIndicator size="small" color={colors.background} />
+                <Text style={styles.emptyTitle}>Loading schedule...</Text>
+              </View>
+            ) : hasSchedules ? (
               <View style={styles.scheduleItemsWrapper}>
                 <View pointerEvents="none" style={styles.timelineColumn}>
                   <View style={styles.timelineLine} />
@@ -442,16 +638,42 @@ export default function ScheduleScreen() {
                 <View style={styles.scheduleCardsColumn}>
                   {visibleScheduleActivities.map((activity, index) => (
                     <View key={activity.id} style={styles.scheduleItemRow}>
-                      <ScheduleCard activity={activity} index={index} />
+                      <ScheduleCard
+                        activity={activity}
+                        index={index}
+                        onPress={handleScheduledWorkoutPress}
+                        onLongPress={handleScheduleCardLongPress}
+                        isMutating={mutatingWorkoutId === activity.scheduledWorkoutId}
+                      />
                     </View>
                   ))}
                 </View>
               </View>
+            ) : loadError ? (
+              <View style={styles.statusState}>
+                <Text style={styles.emptyTitle}>Schedule unavailable</Text>
+                <Text style={styles.emptyDescription}>{loadError}</Text>
+
+                <Pressable
+                  onPress={() => void loadScheduledWorkouts()}
+                  style={styles.retryButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading schedule"
+                >
+                  <Text style={styles.retryButtonText}>Try again</Text>
+                </Pressable>
+              </View>
             ) : (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyTitle}>No schedules yet.</Text>
+                <Text style={styles.emptyTitle}>
+                  {hasAnySchedules
+                    ? "No workouts scheduled for this day."
+                    : "No workouts scheduled for this day."}
+                </Text>
                 <Text style={styles.emptyDescription}>
-                  Your activities for this day will appear here.
+                  {hasAnySchedules
+                    ? "Pick another day or create a new workout to add to your schedule."
+                    : "Create a workout to add it to your schedule."}
                 </Text>
 
                 <Pressable
@@ -465,8 +687,92 @@ export default function ScheduleScreen() {
                 </Pressable>
               </View>
             )}
-          </View>
+          </ScrollView>
         </Animated.View>
+
+        <Modal
+          visible={selectedScheduleForActions != null}
+          transparent
+          animationType="fade"
+          onRequestClose={closeActionSheet}
+        >
+          <Pressable
+            style={styles.actionSheetBackdrop}
+            onPress={closeActionSheet}
+            accessibilityRole="button"
+            accessibilityLabel="Close schedule actions"
+          >
+            {selectedScheduleForActions ? (
+              <Animated.View
+                style={[
+                  styles.actionSheet,
+                  {
+                    marginBottom: Math.max(insets.bottom + 92, 110),
+                    opacity: actionSheetOpacity,
+                    transform: [{ translateY: actionSheetTranslateY }],
+                  },
+                ]}
+              >
+                <Pressable onPress={(event) => event.stopPropagation()}>
+                  <View style={styles.actionSheetHandle} />
+
+                  <Pressable
+                    onPress={() =>
+                      void handleEditScheduledWorkout(selectedScheduleForActions)
+                    }
+                    style={({ pressed }) => [
+                      styles.actionRow,
+                      pressed && styles.actionRowPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${selectedScheduleForActions.title}`}
+                  >
+                    <MaterialCommunityIcons
+                      name="pencil-outline"
+                      size={20}
+                      color={colors.journeyText}
+                    />
+                    <Text style={styles.actionText}>Edit</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() =>
+                      handleDeleteScheduledWorkout(selectedScheduleForActions)
+                    }
+                    style={({ pressed }) => [
+                      styles.actionRow,
+                      pressed && styles.actionRowPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${selectedScheduleForActions.title}`}
+                  >
+                    <MaterialCommunityIcons
+                      name="trash-can-outline"
+                      size={20}
+                      color="#FF8FA3"
+                    />
+                    <Text style={styles.actionDeleteText}>Delete</Text>
+                  </Pressable>
+
+                  <View style={styles.actionSheetSeparator} />
+
+                  <Pressable
+                    onPress={closeActionSheet}
+                    style={({ pressed }) => [
+                      styles.actionRow,
+                      styles.cancelActionRow,
+                      pressed && styles.actionRowPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel schedule actions"
+                  >
+                    <Text style={styles.actionText}>Cancel</Text>
+                  </Pressable>
+                </Pressable>
+              </Animated.View>
+            ) : null}
+          </Pressable>
+        </Modal>
       </View>
     </AppScreen>
   );
@@ -475,11 +781,36 @@ export default function ScheduleScreen() {
 function ScheduleCard({
   activity,
   index,
+  onPress,
+  onLongPress,
+  isMutating,
 }: {
   activity: ScheduleActivity;
   index: number;
+  onPress: (activity: ScheduleActivity) => void;
+  onLongPress: (activity: ScheduleActivity) => void;
+  isMutating: boolean;
 }) {
   const ActivityIcon = getScheduleActivityIcon(activity.title);
+  const handledLongPressRef = useRef(false);
+
+  const handleLongPress = () => {
+    if (isMutating) {
+      return;
+    }
+
+    handledLongPressRef.current = true;
+    void onLongPress(activity);
+  };
+
+  const handlePress = () => {
+    if (handledLongPressRef.current) {
+      handledLongPressRef.current = false;
+      return;
+    }
+
+    void onPress(activity);
+  };
 
   return (
     <View
@@ -490,16 +821,52 @@ function ScheduleCard({
           : styles.scheduleCardSecondary,
       ]}
     >
-      <View style={styles.scheduleContentBlock}>
-        <Text style={styles.scheduleMeta} numberOfLines={1} ellipsizeMode="tail">
-          {formatCardMeta(activity.date, activity.time)}
-        </Text>
-        <Text style={styles.scheduleTitleCard}>{activity.title}</Text>
-        <Text style={styles.scheduleDetail}>{activity.detail}</Text>
-      </View>
+      <Pressable
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        delayLongPress={220}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${activity.title}`}
+        style={styles.scheduleCardPressable}
+      >
+        <View style={styles.scheduleContentBlock}>
+          <Text
+            style={styles.scheduleMeta}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {formatCardMeta(activity.date, activity.time)}
+          </Text>
+          <Text style={styles.scheduleTitleCard} numberOfLines={2}>
+            {activity.title}
+          </Text>
+          <Text style={styles.scheduleDetail} numberOfLines={3}>
+            {activity.detail}
+          </Text>
 
-      <View style={styles.scheduleCardIconCircle}>
-        <ActivityIcon color={colors.background} size={18} strokeWidth={2.4} />
+          <View style={styles.scheduleBottomRow}>
+            <View style={styles.scheduleFooterMeta}>
+              {activity.status !== "scheduled" ? (
+                <View style={styles.scheduleStatusBadge}>
+                  <Text style={styles.scheduleStatus}>
+                    {formatStatusLabel(activity.status)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Pressable>
+
+      <View style={styles.scheduleCardSide}>
+        <View style={styles.scheduleCardIconCircle}>
+          <ActivityIcon color={colors.background} size={18} strokeWidth={2.4} />
+        </View>
+        {isMutating ? (
+          <View style={styles.scheduleMutationIndicator}>
+            <ActivityIndicator size="small" color={colors.background} />
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -518,6 +885,56 @@ function getScheduleActivityIcon(title: string) {
   }
 
   return Activity;
+}
+
+function mapScheduledWorkoutToActivity(
+  workout: ScheduledWorkoutWithPlanRow,
+): ScheduleActivity {
+  const scheduledAt = new Date(workout.scheduled_for);
+  const workoutPlan = workout.workout_plan;
+  const title = workoutPlan?.title?.trim() || "Scheduled workout";
+  const workoutType = workoutPlan?.workout_type?.trim() || null;
+  const description = workoutPlan?.description?.trim() || "";
+
+  return {
+    id: workout.id,
+    title,
+    description,
+    detail: description || workoutType || "Workout scheduled",
+    date: toDateKey(scheduledAt),
+    time: formatTimeLabel(scheduledAt),
+    scheduledFor: workout.scheduled_for,
+    status: normalizeScheduledStatus(workout.status),
+    source: "user",
+    scheduledWorkoutId: workout.id,
+    workoutPlanId: workout.workout_plan_id,
+    durationSeconds: workoutPlan?.duration_seconds ?? undefined,
+    workoutType,
+    reminderEnabled: workout.reminder_enabled,
+    reminderMinutesBefore: workout.reminder_minutes_before,
+  };
+}
+
+function normalizeScheduledStatus(
+  status: string | null | undefined,
+): ScheduleActivity["status"] {
+  if (status === "completed" || status === "cancelled" || status === "missed") {
+    return status;
+  }
+
+  return "scheduled";
+}
+
+function resolveWorkoutRoute(activity: ScheduleActivity) {
+  const normalizedContent = `${activity.title} ${activity.detail} ${activity.workoutType ?? ""}`
+    .trim()
+    .toLowerCase();
+
+  if (normalizedContent.includes("warm") || normalizedContent.includes("run")) {
+    return "/workout/map" as const;
+  }
+
+  return "/workout/workout" as const;
 }
 
 // Builds the fixed two-week calendar window shown on this screen.
@@ -589,6 +1006,26 @@ function formatCardMeta(dateString: string, time?: string) {
   const baseLabel = `${monthLabels[date.getMonth()]} ${date.getDate()}`;
 
   return time ? `${baseLabel}, ${time}` : baseLabel;
+}
+
+function formatTimeLabel(date: Date) {
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatStatusLabel(status: ScheduleActivity["status"]) {
+  switch (status) {
+    case "completed":
+      return "Completed";
+    case "cancelled":
+      return "Cancelled";
+    case "missed":
+      return "Missed";
+    default:
+      return "Scheduled";
+  }
 }
 
 const styles = StyleSheet.create({
@@ -739,14 +1176,22 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
 
+  sheetBottomFill: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    backgroundColor: "#FBF8FC",
+  },
+
   sheetDragArea: {
     alignItems: "center",
     paddingBottom: 10,
     flex: 1,
-    paddingRight: 56,
+    paddingHorizontal: 56,
   },
 
   sheetHandle: {
+    alignSelf: "center",
     width: 60,
     height: 5,
     borderRadius: 999,
@@ -774,7 +1219,7 @@ const styles = StyleSheet.create({
 
   sheetContent: {
     paddingTop: 24,
-    paddingBottom: 240,
+    paddingBottom: 116,
   },
 
   panelAddButton: {
@@ -794,7 +1239,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingLeft: 0,
     paddingRight: 8,
-    marginTop: 20,
+    marginTop: 16,
   },
 
   timelineColumn: {
@@ -808,7 +1253,7 @@ const styles = StyleSheet.create({
   timelineLine: {
     position: "absolute",
     top: timelineNodeTop,
-    bottom: 26,
+    bottom: scheduleCardHeight - timelineNodeTop,
     left: "50%",
     width: 1,
     marginLeft: -0.5,
@@ -821,7 +1266,7 @@ const styles = StyleSheet.create({
   },
 
   scheduleItemRow: {
-    minHeight: scheduleCardHeight,
+    height: scheduleCardHeight,
   },
 
   timelineNode: {
@@ -854,12 +1299,13 @@ const styles = StyleSheet.create({
   scheduleCard: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "flex-start",
-    minHeight: scheduleCardHeight,
+    alignItems: "stretch",
+    height: scheduleCardHeight,
     borderRadius: 26,
-    paddingLeft: 22,
-    paddingRight: 72,
-    paddingVertical: 16,
+    paddingLeft: 20,
+    paddingRight: 18,
+    paddingTop: 16,
+    paddingBottom: 16,
   },
 
   scheduleCardPrimary: {
@@ -870,8 +1316,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5EDAE",
   },
 
+  scheduleCardPressable: {
+    flex: 1,
+    paddingRight: 16,
+  },
   scheduleContentBlock: {
     flex: 1,
+    minHeight: scheduleCardHeight - 32,
+    justifyContent: "space-between",
   },
 
   scheduleMeta: {
@@ -897,16 +1349,120 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  scheduleBottomRow: {
+    marginTop: 10,
+  },
+
+  scheduleFooterMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    columnGap: 12,
+  },
+
+  scheduleStatus: {
+    color: colors.background,
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  scheduleStatusBadge: {
+    minHeight: 28,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(43, 35, 57, 0.08)",
+  },
+
+  scheduleCardSide: {
+    width: 48,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingVertical: 2,
+  },
+
   scheduleCardIconCircle: {
-    position: "absolute",
-    right: 22,
-    top: "50%",
     width: 48,
     height: 48,
-    marginTop: -24,
     borderRadius: 24,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
+    justifyContent: "center",
+  },
+
+  scheduleMutationIndicator: {
+    marginTop: 12,
+    minHeight: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  actionSheetBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(7,9,14,0.28)",
+  },
+
+  actionSheet: {
+    marginHorizontal: 18,
+    borderRadius: 28,
+    paddingTop: 10,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    backgroundColor: "rgba(39,32,56,0.98)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 18,
+  },
+
+  actionSheetHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    marginBottom: 8,
+  },
+
+  actionRow: {
+    minHeight: 52,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  actionRowPressed: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+
+  actionText: {
+    color: colors.journeyText,
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 15,
+  },
+
+  actionDeleteText: {
+    color: "#FF8FA3",
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 15,
+  },
+
+  actionSheetSeparator: {
+    height: 1,
+    marginHorizontal: 12,
+    marginVertical: 6,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+
+  cancelActionRow: {
     justifyContent: "center",
   },
 
@@ -936,6 +1492,15 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
+  statusState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 30,
+    paddingBottom: 8,
+    paddingHorizontal: 22,
+    gap: 10,
+  },
+
   createButton: {
     alignItems: "center",
     justifyContent: "center",
@@ -944,5 +1509,22 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: colors.homeCream,
+  },
+
+  retryButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+    minWidth: 132,
+    minHeight: 48,
+    borderRadius: 24,
+    backgroundColor: colors.homeCream,
+    paddingHorizontal: 20,
+  },
+
+  retryButtonText: {
+    color: colors.background,
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 14,
   },
 });

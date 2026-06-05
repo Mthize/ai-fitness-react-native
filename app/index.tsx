@@ -50,15 +50,6 @@ export default function SplashStepOneScreen() {
     isLoading: isOnboardingStatusLoading,
   } = useResolvedOnboardingCompletion(user);
   const shouldEnterProtected = isResolvedSignedIn;
-  const routeDecision = !isLoaded || isAuthTransitioning
-    ? "loading-auth"
-    : shouldEnterProtected && isOnboardingStatusLoading
-      ? "loading-onboarding"
-      : shouldEnterProtected
-        ? onboardingCompleted
-          ? PRIVATE_HOME_ROUTE
-          : ONBOARDING_ROUTE
-        : "/splash-two";
 
   useEffect(() => {
     if (!isLoaded || shouldEnterProtected) {
@@ -71,23 +62,6 @@ export default function SplashStepOneScreen() {
 
     return () => clearTimeout(timer);
   }, [isLoaded, shouldEnterProtected]);
-
-  if (__DEV__) {
-    console.log("[ONBOARDING ROUTING][index]", {
-      signedInStatus: isSignedIn,
-      userId,
-      clerkSessionId,
-      hasActiveClerkSession,
-      isResolvedSignedIn,
-      clerkMetadataOnboardingValue: {
-        unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
-        public: user?.publicMetadata?.onboardingCompleted ?? null,
-      },
-      secureStoreKey: userId ? `onboarding_completed_${userId}` : null,
-      resolvedOnboardingCompleted: onboardingCompleted,
-      finalRoute: routeDecision,
-    });
-  }
 
   if (!isLoaded || isAuthTransitioning || (shouldEnterProtected && isOnboardingStatusLoading)) {
     return null;

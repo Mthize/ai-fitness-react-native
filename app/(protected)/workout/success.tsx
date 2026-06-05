@@ -310,21 +310,31 @@ export default function WorkoutSuccessScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
-  const { workoutId } = useLocalSearchParams<{ workoutId?: string }>();
+  const { saveStatus, sessionId, workoutId } = useLocalSearchParams<{
+    saveStatus?: string;
+    sessionId?: string;
+    workoutId?: string;
+  }>();
+  const shouldUseMockCompletionFallback =
+    saveStatus === "fallback" || !sessionId;
 
   const [successState] = useState(
     () => SUCCESS_STATES[Math.floor(Math.random() * SUCCESS_STATES.length)],
   );
 
   useEffect(() => {
-    if (workoutId === "warmup-run" || workoutId === "pushups") {
+    // TODO: Remove this local completion fallback once backend persistence is fully stable across all workout flows.
+    if (
+      shouldUseMockCompletionFallback &&
+      (workoutId === "warmup-run" || workoutId === "pushups")
+    ) {
       markWorkoutCompleted(user?.id, workoutId as WorkoutId);
     }
 
     void Haptics.notificationAsync(
       Haptics.NotificationFeedbackType.Success,
     ).catch(() => undefined);
-  }, [user?.id, workoutId]);
+  }, [shouldUseMockCompletionFallback, user?.id, workoutId]);
 
   const handleContinue = () => {
     router.replace("/home");
@@ -400,6 +410,12 @@ export default function WorkoutSuccessScreen() {
           className="absolute inset-x-0 items-center z-[8]"
           style={{ bottom: Math.max(insets.bottom + 34, 48) }}
         >
+          {__DEV__ && saveStatus === "fallback" ? (
+            <Text style={styles.devWarningText}>
+              Supabase session save was unavailable. Success used the local fallback.
+            </Text>
+          ) : null}
+
           <Pressable
             accessibilityLabel="Continue back to home"
             onPress={handleContinue}
@@ -416,7 +432,7 @@ export default function WorkoutSuccessScreen() {
           </Pressable>
         </View>
 
-        {/* TODO: Persist completed workout and update Home status from backend/session store. */}
+        {/* TODO: Remove the mock completion fallback once backend session persistence is stable for every workout flow. */}
       </View>
     </AppScreen>
   );
@@ -430,5 +446,14 @@ const styles = StyleSheet.create({
   confettiPiece: {
     position: "absolute",
     zIndex: 2,
+  },
+  devWarningText: {
+    color: "rgba(255,255,255,0.72)",
+    fontFamily: "MontserratAlternates-Regular",
+    fontSize: 10 * SCALE_X,
+    lineHeight: 14 * SCALE_X,
+    marginBottom: 12 * SCALE_Y,
+    maxWidth: BUTTON_WIDTH,
+    textAlign: "center",
   },
 });

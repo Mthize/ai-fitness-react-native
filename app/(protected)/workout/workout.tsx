@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Check, Pause, Play } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -19,6 +19,8 @@ import { WorkoutHeader } from "@/components/workout/WorkoutHeader";
 import { WorkoutTimerRing } from "@/components/workout/WorkoutTimerRing";
 import { MOCK_WORKOUT, PUSHUP_STEPS } from "@/components/workout/workoutData";
 import { colors } from "@/constants/colors";
+import { completeWorkoutSession } from "@/lib/backend/workouts";
+import { useUser } from "@/lib/clerk";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -89,6 +91,20 @@ function WorkoutSessionPanelShape({ height }: { height: number }) {
 export default function WorkoutScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useUser();
+  const {
+    durationSeconds: durationSecondsParam,
+    mode,
+    scheduledWorkoutId,
+    title,
+    workoutPlanId,
+  } = useLocalSearchParams<{
+    durationSeconds?: string;
+    mode?: string;
+    scheduledWorkoutId?: string;
+    title?: string;
+    workoutPlanId?: string;
+  }>();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState(
     PUSHUP_STEPS[0].durationSeconds,
@@ -96,7 +112,18 @@ export default function WorkoutScreen() {
   const [hasStarted, setHasStarted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [completedStepTimestamps, setCompletedStepTimestamps] = useState<
+    (string | null)[]
+  >(() => PUSHUP_STEPS.map(() => null));
+  const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
   const lastScrollHapticAt = useRef(0);
+  const sessionStartedAtRef = useRef<string | null>(null);
+  const hasSubmittedCompletionRef = useRef(false);
+
+  const isHistoryMode = mode === "history";
+  const workoutTitle = title?.trim() || MOCK_WORKOUT.timerTitle;
+  const workoutSubtitle = MOCK_WORKOUT.timerSubtitle;
+  const plannedDurationSeconds = parseOptionalPositiveInteger(durationSecondsParam);
 
   const currentStep = PUSHUP_STEPS[currentStepIndex] ?? null;
   const panelHeight = SCREEN_HEIGHT - PANEL_TOP;
@@ -113,12 +140,16 @@ export default function WorkoutScreen() {
   }, [currentStep, remainingSeconds]);
 
   const timerButtonLabel = !hasStarted
-    ? "Start workout"
+    ? isHistoryMode
+      ? "Completed workout"
+      : "Start workout"
     : isPaused
       ? "Resume workout"
       : "Pause workout";
 
-  const timerHeading = !hasStarted
+  const timerHeading = isHistoryMode
+    ? "Completed"
+    : !hasStarted
     ? "Start!"
     : isComplete
       ? "Completed"
@@ -128,7 +159,96 @@ export default function WorkoutScreen() {
     router.replace("/home");
   };
 
+  const finalizeWorkoutCompletion = useCallback(
+    async (
+      completedAt: string,
+      completedTimestamps: (string | null)[],
+    ) => {
+      if (hasSubmittedCompletionRef.current) {
+        return;
+      }
+
+      hasSubmittedCompletionRef.current = true;
+      setIsCompletingWorkout(true);
+
+      const fallbackDurationSeconds =
+        plannedDurationSeconds ?? getPushupWorkoutFallbackDurationSeconds();
+      const startedAt = sessionStartedAtRef.current;
+
+      try {
+        if (!isHistoryMode && user?.id) {
+          const session = await completeWorkoutSession({
+            clerkUserId: user.id,
+            workoutPlanId,
+            scheduledWorkoutId,
+            title: workoutTitle,
+            workoutType: "strength",
+            startedAt,
+            completedAt,
+            durationSeconds: getCompletedDurationSeconds(
+              startedAt,
+              completedAt,
+              fallbackDurationSeconds,
+            ),
+            status: "completed",
+            steps: buildCompletedPushupSessionSteps(completedTimestamps, completedAt),
+          });
+
+          router.replace({
+            pathname: "/workout/success",
+            params: {
+              sessionId: session.id,
+              workoutId: "pushups",
+            },
+          });
+
+          return;
+        }
+
+        router.replace({
+          pathname: "/workout/success",
+          params: {
+            saveStatus: "fallback",
+            workoutId: "pushups",
+          },
+        });
+      } catch (error) {
+        if (__DEV__) {
+          console.warn(
+            "[workout] Failed to persist completed pushup session. Falling back to local success state until a retry/offline queue exists.",
+            error,
+          );
+        }
+
+        router.replace({
+          pathname: "/workout/success",
+          params: {
+            saveStatus: "fallback",
+            workoutId: "pushups",
+          },
+        });
+      } finally {
+        setIsCompletingWorkout(false);
+      }
+    },
+    [
+      isHistoryMode,
+      plannedDurationSeconds,
+      router,
+      scheduledWorkoutId,
+      user?.id,
+      workoutPlanId,
+      workoutTitle,
+    ],
+  );
+
   const handleStepComplete = useCallback(() => {
+    const completedAt = new Date().toISOString();
+    const completedTimestamps = [...completedStepTimestamps];
+    completedTimestamps[currentStepIndex] = completedAt;
+
+    setCompletedStepTimestamps(completedTimestamps);
+
     const nextStepIndex = currentStepIndex + 1;
 
     if (nextStepIndex >= PUSHUP_STEPS.length) {
@@ -139,6 +259,7 @@ export default function WorkoutScreen() {
       void Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => undefined);
+      void finalizeWorkoutCompletion(completedAt, completedTimestamps);
       return;
     }
 
@@ -148,23 +269,31 @@ export default function WorkoutScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
       () => undefined,
     );
-  }, [currentStepIndex]);
+  }, [completedStepTimestamps, currentStepIndex, finalizeWorkoutCompletion]);
 
   const handleTimerButtonPress = useCallback(() => {
-    if (isComplete) {
+    if (isComplete || isHistoryMode || isCompletingWorkout) {
       return;
     }
 
     if (!hasStarted) {
+      if (!sessionStartedAtRef.current) {
+        sessionStartedAtRef.current = new Date().toISOString();
+      }
+
       setHasStarted(true);
       setIsPaused(false);
       return;
     }
 
     setIsPaused((currentValue) => !currentValue);
-  }, [hasStarted, isComplete]);
+  }, [hasStarted, isComplete, isCompletingWorkout, isHistoryMode]);
 
   const handleSelectStep = useCallback((index: number) => {
+    if (isHistoryMode || isCompletingWorkout) {
+      return;
+    }
+
     const selectedStep = PUSHUP_STEPS[index];
 
     if (!selectedStep) {
@@ -176,7 +305,7 @@ export default function WorkoutScreen() {
     setHasStarted(false);
     setIsPaused(true);
     setIsComplete(false);
-  }, []);
+  }, [isCompletingWorkout, isHistoryMode]);
 
   const triggerScrollHaptic = useCallback(() => {
     const now = Date.now();
@@ -190,7 +319,14 @@ export default function WorkoutScreen() {
   }, []);
 
   useEffect(() => {
-    if (!hasStarted || isPaused || isComplete || !currentStep) {
+    if (
+      !hasStarted ||
+      isPaused ||
+      isComplete ||
+      isHistoryMode ||
+      isCompletingWorkout ||
+      !currentStep
+    ) {
       return;
     }
 
@@ -200,7 +336,7 @@ export default function WorkoutScreen() {
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [currentStep, hasStarted, isComplete, isPaused]);
+  }, [currentStep, hasStarted, isComplete, isPaused, isHistoryMode, isCompletingWorkout]);
 
   useEffect(() => {
     if (isComplete || remainingSeconds !== 0) {
@@ -209,21 +345,6 @@ export default function WorkoutScreen() {
 
     handleStepComplete();
   }, [handleStepComplete, isComplete, remainingSeconds]);
-
-  useEffect(() => {
-    if (!isComplete) {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      router.replace({
-        pathname: "/workout/success",
-        params: { workoutId: "pushups" },
-      });
-    }, 450);
-
-    return () => clearTimeout(timeoutId);
-  }, [isComplete, router]);
 
   const stepRows = [...PUSHUP_STEPS, { id: "done", label: "Done" as const }];
 
@@ -240,8 +361,8 @@ export default function WorkoutScreen() {
               />
             }
             onBackPress={handleBackPress}
-            subtitle={MOCK_WORKOUT.timerSubtitle}
-            title={MOCK_WORKOUT.timerTitle}
+            subtitle={workoutSubtitle}
+            title={workoutTitle}
           />
         </View>
 
@@ -281,7 +402,7 @@ export default function WorkoutScreen() {
             onPress={handleTimerButtonPress}
             style={styles.pauseButton}
           >
-            {!hasStarted || isPaused ? (
+            {isHistoryMode || !hasStarted || isPaused ? (
               <Play color="#16121D" fill="#16121D" size={26} strokeWidth={2.6} />
             ) : (
               <Pause color="#16121D" size={28} strokeWidth={2.6} />
@@ -375,6 +496,64 @@ export default function WorkoutScreen() {
       </View>
     </AppScreen>
   );
+}
+
+function parseOptionalPositiveInteger(value?: string) {
+  if (!value) {
+    return null;
+  }
+
+  const parsedValue = Number.parseInt(value, 10);
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : null;
+}
+
+function getPushupWorkoutFallbackDurationSeconds() {
+  return PUSHUP_STEPS.reduce((total, step) => total + step.durationSeconds, 0);
+}
+
+function getCompletedDurationSeconds(
+  startedAt: string | null,
+  completedAt: string,
+  fallbackDurationSeconds: number,
+) {
+  if (!startedAt) {
+    return fallbackDurationSeconds;
+  }
+
+  const durationSeconds = Math.max(
+    1,
+    Math.round(
+      (new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000,
+    ),
+  );
+
+  return Number.isFinite(durationSeconds)
+    ? durationSeconds
+    : fallbackDurationSeconds;
+}
+
+function buildCompletedPushupSessionSteps(
+  completedStepTimestamps: (string | null)[],
+  completedAt: string,
+) {
+  const completedSteps = PUSHUP_STEPS.map((step, index) => ({
+    label: step.label,
+    durationSeconds: step.durationSeconds,
+    orderIndex: index,
+    completed: true,
+    completedAt: completedStepTimestamps[index] ?? completedAt,
+  }));
+
+  return [
+    ...completedSteps,
+    {
+      label: "Done",
+      durationSeconds: null,
+      orderIndex: PUSHUP_STEPS.length,
+      completed: true,
+      completedAt,
+    },
+  ];
 }
 
 const styles = StyleSheet.create({

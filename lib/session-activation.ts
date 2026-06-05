@@ -33,8 +33,6 @@ function getSnapshot() {
 }
 
 export function markSessionActivationPending(sessionId: string) {
-  console.log("[SESSION ACTIVATION DEBUG] pending set", sessionId);
-
   activationState = {
     pending: true,
     sessionId,
@@ -51,12 +49,6 @@ export function clearSessionActivationPending(reason = "unspecified") {
   ) {
     return;
   }
-
-  console.log("[SESSION ACTIVATION DEBUG] pending cleared", {
-    reason,
-    previousSessionId: activationState.sessionId,
-    activationStartedAt: activationState.activationStartedAt,
-  });
 
   activationState = {
     pending: false,

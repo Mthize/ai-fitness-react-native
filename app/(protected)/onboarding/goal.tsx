@@ -14,6 +14,10 @@ import {
   type OnboardingGoal,
   useOnboarding,
 } from "@/lib/auth";
+import {
+  markOnboardingCompleted as markProfileOnboardingCompleted,
+  upsertUserProfile,
+} from "@/lib/backend/profile";
 import { useUser } from "@/lib/clerk";
 
 export default function GoalScreen() {
@@ -78,21 +82,38 @@ export default function GoalScreen() {
           },
         },
       });
+      await upsertUserProfile({
+        clerkUserId: user.id,
+        fullName:
+          [user.firstName?.trim(), user.lastName?.trim()]
+            .filter(Boolean)
+            .join(" ")
+            .trim() ||
+          user.username ||
+          user.primaryEmailAddress?.emailAddress?.split("@")[0] ||
+          "User",
+        avatarUrl: user.imageUrl ?? null,
+        unitOfMeasure:
+          onboarding.weightUnit === "lb" || onboarding.heightUnit === "inches"
+            ? "imperial"
+            : "metric",
+        heightCm:
+          onboarding.heightUnit === "inches"
+            ? Math.round(onboarding.height * 2.54)
+            : onboarding.height,
+        weightKg:
+          onboarding.weightUnit === "lb"
+            ? Math.round((onboarding.weight / 2.2046226218) * 10) / 10
+            : onboarding.weight,
+        gender:
+          typeof user.unsafeMetadata?.onboarding?.gender === "string"
+            ? user.unsafeMetadata.onboarding.gender
+            : null,
+        onboardingCompleted: true,
+      });
+      await markProfileOnboardingCompleted(user.id);
       await setPersistedOnboardingCompleted(user.id, true);
       await user.reload();
-
-      if (__DEV__) {
-        console.log("[ONBOARDING DEBUG] completion persisted", {
-          userId: user.id,
-          secureStoreKey: `onboarding_completed_${user.id}`,
-          secureStoreValue: "true",
-          publicMetadataValue:
-            user.publicMetadata?.onboardingCompleted ?? null,
-          unsafeMetadataValue:
-            user.unsafeMetadata?.onboardingCompleted ?? null,
-          routeDecision: PRIVATE_HOME_ROUTE,
-        });
-      }
 
       markOnboardingCompleted();
       router.replace(PRIVATE_HOME_ROUTE);
