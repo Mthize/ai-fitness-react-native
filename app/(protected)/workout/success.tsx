@@ -28,7 +28,24 @@ import {
   MOCK_WORKOUT,
   type WorkoutId,
 } from "@/components/workout/workoutData";
-import { colors } from "@/constants/colors";
+import {
+  colors,
+  CONFETTI_LAVENDER,
+  CONFETTI_ORANGE_DARK,
+  CONFETTI_ORANGE_LIGHT,
+  CONFETTI_PINK,
+  CONFETTI_PINK_BRIGHT,
+  CONFETTI_PINK_DEEP,
+  CONFETTI_PURPLE,
+  CONFETTI_PURPLE_DARK,
+  CONFETTI_VIOLET,
+  SUCCESS_CHECK,
+  SUCCESS_FIRE,
+  SUCCESS_LIGHTNING,
+  SUCCESS_STRENGTH,
+  SUCCESS_TROPHY,
+} from "@/constants/colors";
+import { useUser } from "@/lib/clerk";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -60,33 +77,33 @@ const SUCCESS_STATES: SuccessState[] = [
   {
     icon: "fire",
     title: MOCK_WORKOUT.successMessage,
-    iconColor: "#FF8251",
+    iconColor: SUCCESS_FIRE,
   },
   {
     icon: "trophy",
     title: "Workout crushed!",
-    iconColor: "#FF9B3E",
+    iconColor: SUCCESS_TROPHY,
   },
   {
     icon: "arm-flex",
     title: "Strong finish!",
-    iconColor: "#9156E2",
+    iconColor: SUCCESS_STRENGTH,
   },
   {
     icon: "lightning-bolt",
     title: "Energy unlocked!",
-    iconColor: "#F29A19",
+    iconColor: SUCCESS_LIGHTNING,
   },
   {
     icon: "check-decagram",
     title: "Session complete!",
-    iconColor: "#5C74E6",
+    iconColor: SUCCESS_CHECK,
   },
 ];
 
 const CONFETTI_PIECES: ConfettiPiece[] = [
   {
-    id: "left-orange-arc-top",
+    id: "left-confetti-orange-light-arc-top",
     style: {
       left: 26 * SCALE_X,
       top: 274 * SCALE_Y,
@@ -94,7 +111,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
       height: 56 * SCALE_Y,
       borderRadius: 24 * SCALE_X,
       borderWidth: 8,
-      borderColor: "#F0A14A",
+      borderColor: CONFETTI_ORANGE_LIGHT,
       borderTopColor: "transparent",
       borderLeftColor: "transparent",
       backgroundColor: "transparent",
@@ -102,7 +119,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "left-purple-arc-top",
+    id: "left-confetti-purple-arc-top",
     style: {
       left: 118 * SCALE_X,
       top: 232 * SCALE_Y,
@@ -110,7 +127,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
       height: 74 * SCALE_Y,
       borderRadius: 999,
       borderWidth: 9,
-      borderColor: "#7A45E6",
+      borderColor: CONFETTI_PURPLE,
       borderBottomColor: "transparent",
       borderLeftColor: "transparent",
       backgroundColor: "transparent",
@@ -118,7 +135,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "left-pink-arc",
+    id: "left-confetti-pink-arc",
     style: {
       left: 12 * SCALE_X,
       top: 384 * SCALE_Y,
@@ -126,7 +143,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
       height: 54 * SCALE_Y,
       borderRadius: 22 * SCALE_X,
       borderWidth: 7,
-      borderColor: "#D52E84",
+      borderColor: CONFETTI_PINK,
       borderTopColor: "transparent",
       borderLeftColor: "transparent",
       backgroundColor: "transparent",
@@ -134,19 +151,19 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "left-purple-bar",
+    id: "left-confetti-purple-dark-bar",
     style: {
       left: 48 * SCALE_X,
       top: 486 * SCALE_Y,
       width: 10 * SCALE_X,
       height: 82 * SCALE_Y,
       borderRadius: 999,
-      backgroundColor: "#6D33D7",
+      backgroundColor: CONFETTI_PURPLE_DARK,
       transform: [{ rotate: "74deg" }],
     },
   },
   {
-    id: "left-blue-arc-low",
+    id: "left-confetti-violet-arc-low",
     style: {
       left: 18 * SCALE_X,
       top: 552 * SCALE_Y,
@@ -154,7 +171,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
       height: 68 * SCALE_Y,
       borderRadius: 28 * SCALE_X,
       borderWidth: 8,
-      borderColor: "#6C31D6",
+      borderColor: CONFETTI_VIOLET,
       borderTopColor: "transparent",
       borderLeftColor: "transparent",
       backgroundColor: "transparent",
@@ -162,7 +179,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "right-purple-arc-top",
+    id: "right-confetti-lavender-arc-top",
     style: {
       right: 28 * SCALE_X,
       top: 222 * SCALE_Y,
@@ -170,7 +187,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
       height: 68 * SCALE_Y,
       borderRadius: 30 * SCALE_X,
       borderWidth: 8,
-      borderColor: "#ECEBFF",
+      borderColor: CONFETTI_LAVENDER,
       borderTopColor: "transparent",
       borderRightColor: "transparent",
       backgroundColor: "transparent",
@@ -178,19 +195,19 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "right-pink-bar",
+    id: "right-confetti-pink-bright-bar",
     style: {
       right: 58 * SCALE_X,
       top: 346 * SCALE_Y,
       width: 10 * SCALE_X,
       height: 78 * SCALE_Y,
       borderRadius: 999,
-      backgroundColor: "#D92486",
+      backgroundColor: CONFETTI_PINK_BRIGHT,
       transform: [{ rotate: "72deg" }],
     },
   },
   {
-    id: "right-blue-arc-mid",
+    id: "right-confetti-purple-arc-mid",
     style: {
       right: 6 * SCALE_X,
       top: 446 * SCALE_Y,
@@ -198,7 +215,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
       height: 70 * SCALE_Y,
       borderRadius: 32 * SCALE_X,
       borderWidth: 8,
-      borderColor: "#7A45E6",
+      borderColor: CONFETTI_PURPLE,
       borderTopColor: "transparent",
       borderRightColor: "transparent",
       backgroundColor: "transparent",
@@ -206,7 +223,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "right-red-arc-low",
+    id: "right-confetti-pink-deep-arc-low",
     style: {
       right: 12 * SCALE_X,
       top: 552 * SCALE_Y,
@@ -214,7 +231,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
       height: 56 * SCALE_Y,
       borderRadius: 22 * SCALE_X,
       borderWidth: 7,
-      borderColor: "#D12E84",
+      borderColor: CONFETTI_PINK_DEEP,
       borderTopColor: "transparent",
       borderRightColor: "transparent",
       backgroundColor: "transparent",
@@ -222,7 +239,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "right-orange-arc-low",
+    id: "right-confetti-orange-dark-arc-low",
     style: {
       right: 6 * SCALE_X,
       top: 612 * SCALE_Y,
@@ -230,7 +247,7 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
       height: 68 * SCALE_Y,
       borderRadius: 28 * SCALE_X,
       borderWidth: 8,
-      borderColor: "#C57B2F",
+      borderColor: CONFETTI_ORANGE_DARK,
       borderTopColor: "transparent",
       borderRightColor: "transparent",
       backgroundColor: "transparent",
@@ -292,6 +309,7 @@ function AnimatedConfettiPiece({
 export default function WorkoutSuccessScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
   const { workoutId } = useLocalSearchParams<{ workoutId?: string }>();
 
   const [successState] = useState(
@@ -300,13 +318,13 @@ export default function WorkoutSuccessScreen() {
 
   useEffect(() => {
     if (workoutId === "warmup-run" || workoutId === "pushups") {
-      markWorkoutCompleted(workoutId as WorkoutId);
+      markWorkoutCompleted(user?.id, workoutId as WorkoutId);
     }
 
     void Haptics.notificationAsync(
       Haptics.NotificationFeedbackType.Success,
     ).catch(() => undefined);
-  }, [workoutId]);
+  }, [user?.id, workoutId]);
 
   const handleContinue = () => {
     router.replace("/home");
@@ -314,47 +332,87 @@ export default function WorkoutSuccessScreen() {
 
   return (
     <AppScreen backgroundColor={colors.background}>
-      <View style={styles.container}>
+      <View className="flex-1">
         {CONFETTI_PIECES.map((piece, index) => (
           <AnimatedConfettiPiece key={piece.id} piece={piece} index={index} />
         ))}
 
-        <View style={styles.cardWrap}>
-          <View pointerEvents="none" style={styles.rearGlassCard} />
+        <View
+          className="absolute inset-x-0 items-center z-[5]"
+          style={{ top: CARD_WRAP_TOP }}
+        >
+          <View
+            pointerEvents="none"
+            className="absolute z-[1] border border-white/[0.12] bg-white/10"
+            style={{
+              top: -118 * SCALE_Y,
+              width: 204 * SCALE_X,
+              height: 150 * SCALE_Y,
+              borderRadius: 18 * SCALE_X,
+            }}
+          />
 
           <BlurView
             intensity={36}
             tint="light"
             pointerEvents="none"
-            style={styles.middleBlurCard}
+            className="absolute overflow-hidden z-[2]"
+            style={{
+              top: -62 * SCALE_Y,
+              width: 228 * SCALE_X,
+              height: 170 * SCALE_Y,
+              borderRadius: 18 * SCALE_X,
+            }}
           >
-            <View style={styles.middleBlurOverlay} />
+            <View className="absolute inset-0 border border-white/[0.16] bg-white/[0.20]" />
           </BlurView>
 
-          <View style={styles.card}>
+          <View
+            className="z-[3] items-center justify-center bg-white shadow-lg"
+            style={{
+              width: CARD_WIDTH,
+              height: CARD_HEIGHT,
+              borderRadius: 18 * SCALE_X,
+              paddingHorizontal: 26 * SCALE_X,
+            }}
+          >
             <MaterialCommunityIcons
               name={successState.icon}
               size={64 * SCALE_X}
               color={successState.iconColor}
-              style={styles.successIcon}
+              style={{ marginBottom: 26 * SCALE_Y }}
             />
 
-            <Text style={styles.message}>{successState.title}</Text>
+            <Text
+              className="text-center font-[MontserratAlternates-Bold] text-[#111018]"
+              style={{
+                fontSize: 15 * SCALE_X,
+                lineHeight: 19 * SCALE_X,
+                maxWidth: 180 * SCALE_X,
+              }}
+            >
+              {successState.title}
+            </Text>
           </View>
         </View>
 
         <View
-          style={[
-            styles.footer,
-            { bottom: Math.max(insets.bottom + 34, 48) },
-          ]}
+          className="absolute inset-x-0 items-center z-[8]"
+          style={{ bottom: Math.max(insets.bottom + 34, 48) }}
         >
           <Pressable
             accessibilityLabel="Continue back to home"
             onPress={handleContinue}
-            style={styles.button}
+            className="items-center justify-center bg-[#D6EBEB]"
+            style={{
+              width: BUTTON_WIDTH,
+              height: 58 * SCALE_Y,
+              borderRadius: 29 * SCALE_Y,
+            }}
           >
-            <Text style={styles.buttonText}>Continue</Text>
+            <Text className="font-[MontserratAlternates-SemiBold] text-[15px] leading-[19px] text-[#262135]">
+              Continue
+            </Text>
           </Pressable>
         </View>
 
@@ -365,94 +423,9 @@ export default function WorkoutSuccessScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
   animatedConfettiShell: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 2,
-  },
-  cardWrap: {
-    position: "absolute",
-    top: CARD_WRAP_TOP,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 5,
-  },
-  rearGlassCard: {
-    position: "absolute",
-    top: -118 * SCALE_Y,
-    width: 204 * SCALE_X,
-    height: 150 * SCALE_Y,
-    borderRadius: 18 * SCALE_X,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    zIndex: 1,
-  },
-  middleBlurCard: {
-    position: "absolute",
-    top: -62 * SCALE_Y,
-    width: 228 * SCALE_X,
-    height: 170 * SCALE_Y,
-    borderRadius: 18 * SCALE_X,
-    overflow: "hidden",
-    zIndex: 2,
-  },
-  middleBlurOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.20)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-  },
-  card: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    borderRadius: 18 * SCALE_X,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 26 * SCALE_X,
-    zIndex: 3,
-    elevation: 6,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-  },
-  successIcon: {
-    marginBottom: 26 * SCALE_Y,
-  },
-  message: {
-    color: "#111018",
-    fontFamily: "MontserratAlternates-Bold",
-    fontSize: 15 * SCALE_X,
-    lineHeight: 19 * SCALE_X,
-    textAlign: "center",
-    maxWidth: 180 * SCALE_X,
-  },
-  footer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 8,
-  },
-  button: {
-    width: BUTTON_WIDTH,
-    height: 58 * SCALE_Y,
-    borderRadius: 29 * SCALE_Y,
-    backgroundColor: colors.homeAqua,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  buttonText: {
-    color: colors.homeDark,
-    fontFamily: "MontserratAlternates-SemiBold",
-    fontSize: 15,
-    lineHeight: 19,
   },
   confettiPiece: {
     position: "absolute",

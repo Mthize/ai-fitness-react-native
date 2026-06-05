@@ -30,7 +30,7 @@ import { AppScreen } from "@/components/AppScreen";
 import {
   ONBOARDING_ROUTE,
   PRIVATE_HOME_ROUTE,
-  getUserOnboardingCompleted,
+  useResolvedOnboardingCompletion,
 } from "@/lib/auth";
 import { useAuth, useClerk, useUser } from "@/lib/clerk";
 import { useSessionActivationState } from "@/lib/session-activation";
@@ -40,10 +40,25 @@ export default function SplashStepOneScreen() {
   const clerk = useClerk();
   const { user } = useUser();
   const { pending } = useSessionActivationState();
+  const userId = user?.id ?? null;
   const clerkSessionId = clerk.session?.id ?? null;
-  const shouldEnterProtected =
-    isSignedIn || pending || Boolean(clerkSessionId) || Boolean(user?.id);
-  const onboardingCompleted = getUserOnboardingCompleted(user);
+  const hasActiveClerkSession = Boolean(userId && clerkSessionId);
+  const isResolvedSignedIn = Boolean(isSignedIn || hasActiveClerkSession);
+  const isAuthTransitioning = pending && !isResolvedSignedIn;
+  const {
+    hasCompletedOnboarding: onboardingCompleted,
+    isLoading: isOnboardingStatusLoading,
+  } = useResolvedOnboardingCompletion(user);
+  const shouldEnterProtected = isResolvedSignedIn;
+  const routeDecision = !isLoaded || isAuthTransitioning
+    ? "loading-auth"
+    : shouldEnterProtected && isOnboardingStatusLoading
+      ? "loading-onboarding"
+      : shouldEnterProtected
+        ? onboardingCompleted
+          ? PRIVATE_HOME_ROUTE
+          : ONBOARDING_ROUTE
+        : "/splash-two";
 
   useEffect(() => {
     if (!isLoaded || shouldEnterProtected) {
@@ -57,7 +72,24 @@ export default function SplashStepOneScreen() {
     return () => clearTimeout(timer);
   }, [isLoaded, shouldEnterProtected]);
 
-  if (!isLoaded) {
+  if (__DEV__) {
+    console.log("[ONBOARDING ROUTING][index]", {
+      signedInStatus: isSignedIn,
+      userId,
+      clerkSessionId,
+      hasActiveClerkSession,
+      isResolvedSignedIn,
+      clerkMetadataOnboardingValue: {
+        unsafe: user?.unsafeMetadata?.onboardingCompleted ?? null,
+        public: user?.publicMetadata?.onboardingCompleted ?? null,
+      },
+      secureStoreKey: userId ? `onboarding_completed_${userId}` : null,
+      resolvedOnboardingCompleted: onboardingCompleted,
+      finalRoute: routeDecision,
+    });
+  }
+
+  if (!isLoaded || isAuthTransitioning || (shouldEnterProtected && isOnboardingStatusLoading)) {
     return null;
   }
 
@@ -65,9 +97,7 @@ export default function SplashStepOneScreen() {
     return (
       <Redirect
         href={
-          pending || !onboardingCompleted
-            ? ONBOARDING_ROUTE
-            : PRIVATE_HOME_ROUTE
+          onboardingCompleted ? PRIVATE_HOME_ROUTE : ONBOARDING_ROUTE
         }
       />
     );

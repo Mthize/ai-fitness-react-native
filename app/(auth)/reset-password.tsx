@@ -76,7 +76,7 @@ export default function ResetPasswordScreen() {
       >
         <View style={styles.content}>
           <View>
-            <AuthBackButton />
+            <AuthBackButton fallbackHref="/forgot-password" />
 
             <Text style={styles.heading}>
               Create new{"\n"}password

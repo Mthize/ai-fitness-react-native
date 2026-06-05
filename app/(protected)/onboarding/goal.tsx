@@ -10,6 +10,7 @@ import {
   getReadableErrorMessage,
   ONBOARDING_GOALS,
   PRIVATE_HOME_ROUTE,
+  setPersistedOnboardingCompleted,
   type OnboardingGoal,
   useOnboarding,
 } from "@/lib/auth";
@@ -50,6 +51,21 @@ export default function GoalScreen() {
     setIsSaving(true);
 
     try {
+      const updateUser = user as typeof user & {
+        update?: ((params: {
+          publicMetadata?: Record<string, unknown>;
+        }) => Promise<unknown>) | null;
+      };
+
+      if (typeof updateUser.update === "function") {
+        await updateUser.update({
+          publicMetadata: {
+            ...((user.publicMetadata as Record<string, unknown> | null) ?? {}),
+            onboardingCompleted: true,
+          },
+        });
+      }
+
       await user.updateMetadata({
         unsafeMetadata: {
           onboardingCompleted: true,
@@ -62,7 +78,22 @@ export default function GoalScreen() {
           },
         },
       });
+      await setPersistedOnboardingCompleted(user.id, true);
       await user.reload();
+
+      if (__DEV__) {
+        console.log("[ONBOARDING DEBUG] completion persisted", {
+          userId: user.id,
+          secureStoreKey: `onboarding_completed_${user.id}`,
+          secureStoreValue: "true",
+          publicMetadataValue:
+            user.publicMetadata?.onboardingCompleted ?? null,
+          unsafeMetadataValue:
+            user.unsafeMetadata?.onboardingCompleted ?? null,
+          routeDecision: PRIVATE_HOME_ROUTE,
+        });
+      }
+
       markOnboardingCompleted();
       router.replace(PRIVATE_HOME_ROUTE);
     } catch (error) {

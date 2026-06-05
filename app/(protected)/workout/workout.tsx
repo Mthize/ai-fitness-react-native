@@ -125,11 +125,6 @@ export default function WorkoutScreen() {
       : currentStep?.label ?? "Start!";
 
   const handleBackPress = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-
     router.replace("/home");
   };
 
@@ -235,13 +230,13 @@ export default function WorkoutScreen() {
   return (
     <AppScreen backgroundColor={colors.background}>
       <View style={styles.container}>
-        <View style={[styles.headerWrap, { top: Math.max(8 - insets.top, -3) }]}>
+        <View style={[styles.header, { top: Math.max(8 - insets.top, - 3) }]}>
           <WorkoutHeader
             action={
               <MaterialCommunityIcons
                 color={colors.background}
                 name="dumbbell"
-                size={19}
+                size={25}
               />
             }
             onBackPress={handleBackPress}
@@ -387,14 +382,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  headerWrap: {
-    paddingHorizontal: 18,
+  header: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    zIndex: 30,
   },
   centerContent: {
     flex: 1,
     alignItems: "center",
-    paddingTop: 42 * SCALE_Y,
-    paddingBottom: 214 * SCALE_Y,
+    paddingTop: 90 * SCALE_Y,
+    paddingBottom: 166 * SCALE_Y,
   },
   startText: {
     color: colors.journeyText,
@@ -404,7 +402,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   ringWrap: {
-    marginTop: 34 * SCALE_Y,
+    marginTop: 28 * SCALE_Y,
     alignItems: "center",
     justifyContent: "center",
   },

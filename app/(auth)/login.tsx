@@ -41,11 +41,11 @@ import { AuthInput } from "@/components/auth/AuthInput";
 import { AppScreen } from "@/components/AppScreen";
 import { AuthBackButton } from "@/components/auth/AuthBackButton";
 import { colors } from "@/constants/colors";
-import { useAuth, useClerk, useSignIn, useSSO } from "@/lib/clerk";
+import { useAuth, useClerk, useSignIn, useSSO, useUser } from "@/lib/clerk";
 import {
   getClerkErrorMessage,
   getReadableErrorMessage,
-  ONBOARDING_ROUTE,
+  getSignedInRedirectRoute,
 } from "@/lib/auth";
 import { markSessionActivationPending } from "@/lib/session-activation";
 
@@ -54,6 +54,7 @@ WebBrowser.maybeCompleteAuthSession();
 export default function LoginSignUpScreen() {
   const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
   const clerk = useClerk();
+  const { user } = useUser();
   const { setActive } = clerk;
   const { isLoaded: isSignInLoaded, signIn, errors, fetchStatus } = useSignIn();
   const { startSSOFlow } = useSSO();
@@ -87,7 +88,7 @@ export default function LoginSignUpScreen() {
   }
 
   if (isSignedIn) {
-    return <Redirect href={ONBOARDING_ROUTE} />;
+    return <Redirect href={getSignedInRedirectRoute(user)} />;
   }
 
   function clearErrorState() {
@@ -149,8 +150,8 @@ export default function LoginSignUpScreen() {
           navigate: async () => {
             console.log("[TEMP AUTH DEBUG] setActive navigate callback");
             await new Promise((resolve) => setTimeout(resolve, 100));
-            console.log("[TEMP AUTH DEBUG] redirecting /onboarding");
-            router.replace(ONBOARDING_ROUTE);
+            console.log("[TEMP AUTH DEBUG] redirecting /");
+            router.replace("/");
           },
         });
         console.log("[TEMP AUTH DEBUG] setActive complete");
@@ -212,8 +213,8 @@ export default function LoginSignUpScreen() {
           navigate: async () => {
             console.log("[TEMP AUTH DEBUG] setActive navigate callback");
             await new Promise((resolve) => setTimeout(resolve, 100));
-            console.log("[TEMP AUTH DEBUG] redirecting /onboarding");
-            router.replace(ONBOARDING_ROUTE);
+            console.log("[TEMP AUTH DEBUG] redirecting /");
+            router.replace("/");
           },
         });
         console.log("[TEMP AUTH DEBUG] setActive complete");
@@ -258,7 +259,7 @@ export default function LoginSignUpScreen() {
       >
         <View style={styles.content}>
           <View>
-            <AuthBackButton />
+            <AuthBackButton fallbackHref="/splash-three" />
 
             <Image
               source={require("../../assets/Group 19104.png")}

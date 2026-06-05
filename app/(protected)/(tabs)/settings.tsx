@@ -1,121 +1,89 @@
 import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
+import { ChevronRight, LogOut, Pencil } from "lucide-react-native";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import {
-  ChevronRight,
-  Crown,
-  Lock,
-  LogOut,
-  Pencil,
-} from "lucide-react-native";
-import {
+  ActivityIndicator,
+  Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
+  TextInput,
   View,
 } from "react-native";
 
 import { AppScreen } from "@/components/AppScreen";
 import { colors } from "@/constants/colors";
+import { getUserProfileDisplayState } from "@/lib/auth";
 import { useAuth, useUser } from "@/lib/clerk";
 
-const isSubscribed = false;
+const NEUTRAL_SWITCH_TRACK = "rgba(255,255,255,0.16)";
+const NEUTRAL_SWITCH_THUMB = "#F4F4F4";
 
 type SettingsRowConfig = {
   label: string;
   value?: string;
-  badgeLabel?: string;
-  highlighted?: boolean;
-  premiumOnly?: boolean;
   destructive?: boolean;
   showChevron?: boolean;
+  type?: "navigation" | "toggle" | "action";
+  enabled?: boolean;
+  onToggle?: (value: boolean) => void;
   onPress?: () => void | Promise<void>;
 };
 
-type SettingsSectionProps = {
-  title: string;
-  rows: SettingsRowConfig[];
-  isSubscribed: boolean;
-};
+type SettingsSectionProps = { title: string; rows: SettingsRowConfig[] };
 
 type SettingsRowProps = {
   row: SettingsRowConfig;
-  isSubscribed: boolean;
   isLast: boolean;
 };
 
-// TODO: Replace temporary profile values with authenticated user profile data.
-const temporaryProfile = {
-  height: "172 CM",
-  weight: "62 KG",
+type ActiveModal = "profile" | "name" | "weight" | "height" | "gender" | null;
+type BusyAction = "name" | "weight" | "height" | "gender" | "photo" | null;
+type GenderOption = "Male" | "Female" | "Other";
+
+const GENDER_OPTIONS: GenderOption[] = ["Male", "Female", "Other"];
+
+type EditableUserMethods = {
+  unsafeMetadata?: Record<string, unknown> | null;
+  delete?: () => Promise<unknown>;
+  update?: (params: { firstName?: string; lastName?: string }) => Promise<unknown>;
+  updateMetadata?: (params: {
+    unsafeMetadata: Record<string, unknown>;
+  }) => Promise<unknown>;
+  setProfileImage?: (params: { file: File | Blob | null }) => Promise<unknown>;
+  reload?: () => Promise<unknown>;
 };
-
-// TODO: Add detail screens for these app settings when their routes are ready.
-const appSettingsRows: SettingsRowConfig[] = [
-  { label: "Account Information" },
-  { label: "Notifications" },
-  { label: "Profile Settings" },
-  { label: "Text Size", value: "Medium" },
-  { label: "Theme & Appearance", value: "Dark" },
-  { label: "Language", value: "English" },
-];
-
-// TODO: Add detail screens for updating fitness preferences once those routes exist.
-const fitnessPreferenceRows: SettingsRowConfig[] = [
-  { label: "Fitness Goals" },
-  { label: "Workout Level" },
-  { label: "Preferred Workout Days" },
-  { label: "Reminder Time", value: "7:00 AM" },
-  { label: "Units", value: "Metric" },
-];
-
-// TODO: Replace temporary subscription state with real payment/subscription status.
-const subscriptionRows: SettingsRowConfig[] = [
-  { label: "Current Plan", value: "Free" },
-  {
-    label: "Upgrade to Premium",
-    badgeLabel: "Premium",
-    highlighted: true,
-  },
-  { label: "Manage Subscription" },
-  { label: "Restore Purchases" },
-];
-
-// TODO: Connect AI feature access to real subscription entitlement checks.
-const aiFeatureRows: SettingsRowConfig[] = [
-  {
-    label: "AI Workout Suggestions",
-    premiumOnly: true,
-    badgeLabel: "Premium",
-  },
-  {
-    label: "AI Insights",
-    premiumOnly: true,
-    badgeLabel: "Premium",
-  },
-  {
-    label: "Personalized Activity Plans",
-    premiumOnly: true,
-    badgeLabel: "Premium",
-  },
-];
-
-const supportRows: SettingsRowConfig[] = [
-  { label: "Help Center" },
-  { label: "Contact Support" },
-  { label: "Report a Problem" },
-  { label: "Send Feedback" },
-];
-
-const legalRows: SettingsRowConfig[] = [
-  { label: "Terms of Service" },
-  { label: "Privacy Policy" },
-  { label: "Data & Privacy" },
-];
 
 export default function SettingsScreen() {
   const { signOut } = useAuth();
   const { user } = useUser();
+  const profile = getUserProfileDisplayState(user);
+  const editableUser = user as (NonNullable<typeof user> & EditableUserMethods) | null;
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [busyAction, setBusyAction] = useState<BusyAction>(null);
+  const [appleWatchEnabled, setAppleWatchEnabled] = useState(false);
+  const [healthAppEnabled, setHealthAppEnabled] = useState(false);
+  const [workoutRemindersEnabled, setWorkoutRemindersEnabled] = useState(true);
+  const [weekStartsOn, setWeekStartsOn] = useState<"Sunday" | "Monday">(
+    "Monday",
+  );
+  const [firstNameInput, setFirstNameInput] = useState(user?.firstName?.trim() ?? "");
+  const [lastNameInput, setLastNameInput] = useState(user?.lastName?.trim() ?? "");
+  const [weightInput, setWeightInput] = useState(
+    profile.weight ? String(profile.weight) : "",
+  );
+  const [heightInput, setHeightInput] = useState(
+    profile.height ? String(profile.height) : "",
+  );
+  const [genderInput, setGenderInput] = useState<GenderOption | null>(
+    isGenderOption(profile.gender) ? profile.gender : null,
+  );
 
   const first = user?.firstName?.trim();
   const last = user?.lastName?.trim();
@@ -124,28 +92,427 @@ export default function SettingsScreen() {
     fullName ||
     user?.username ||
     user?.primaryEmailAddress?.emailAddress?.split("@")[0] ||
-    "Youssef Labidi";
+    "User";
   const initials =
     displayName
       .split(/\s+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
-      .join("") || "YL";
+      .join("") || "U";
 
-  // Reuse the existing Clerk sign-out flow and return to the public login screen using a visible route path.
+  useEffect(() => {
+    setFirstNameInput(user?.firstName?.trim() ?? "");
+    setLastNameInput(user?.lastName?.trim() ?? "");
+  }, [user?.firstName, user?.lastName]);
+
+  useEffect(() => {
+    setWeightInput(profile.weight ? String(profile.weight) : "");
+  }, [profile.weight]);
+
+  useEffect(() => {
+    setHeightInput(profile.height ? String(profile.height) : "");
+  }, [profile.height]);
+
+  useEffect(() => {
+    setGenderInput(isGenderOption(profile.gender) ? profile.gender : null);
+  }, [profile.gender]);
+
+  async function reloadUser() {
+    if (typeof editableUser?.reload === "function") {
+      await editableUser.reload();
+    }
+  }
+
+  async function persistOnboardingProfile(partial: Record<string, unknown>) {
+    if (!editableUser || typeof editableUser.updateMetadata !== "function") {
+      throw new Error("User metadata update is not available.");
+    }
+
+    const unsafeMetadata = editableUser.unsafeMetadata ?? {};
+    const onboarding =
+      typeof unsafeMetadata.onboarding === "object" &&
+      unsafeMetadata.onboarding !== null
+        ? (unsafeMetadata.onboarding as Record<string, unknown>)
+        : {};
+
+    // TODO: Replace onboarding-metadata profile edits with a persisted backend user profile.
+    await editableUser.updateMetadata({
+      unsafeMetadata: {
+        ...unsafeMetadata,
+        onboarding: {
+          ...onboarding,
+          ...partial,
+        },
+      },
+    });
+
+    await reloadUser();
+  }
+
+  function closeModal() {
+    if (busyAction) {
+      return;
+    }
+
+    setActiveModal(null);
+  }
+
   async function handleSignOut() {
     await signOut();
     router.replace("/login");
   }
 
+  async function handleDeleteAccountConfirmed() {
+    // TODO: Delete user data from backend storage when account deletion is implemented.
+    // TODO: Revoke auth sessions after account deletion.
+    // TODO: Do not store plaintext passwords. Passwords must be handled by the auth provider using secure hashing.
+    // TODO: Encrypt sensitive user data at rest and use secure transport when backend is added.
+    const deleteUser = editableUser?.delete;
+
+    if (typeof deleteUser !== "function") {
+      console.warn(
+        "[settings] Account deletion is not wired in the current auth provider surface yet.",
+      );
+      return;
+    }
+
+    try {
+      await deleteUser.call(user);
+      router.replace("/login");
+    } catch (error) {
+      console.warn("[settings] Failed to delete account.", error);
+    }
+  }
+
+  function handleDeleteAccountPress() {
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account and data. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void handleDeleteAccountConfirmed();
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleSaveName() {
+    const updateUser = editableUser?.update;
+    const trimmedFirstName = firstNameInput.trim();
+    const trimmedLastName = lastNameInput.trim();
+
+    if (!trimmedFirstName && !trimmedLastName) {
+      Alert.alert("Name required", "Enter a first name or last name.");
+      return;
+    }
+
+    if (typeof updateUser !== "function") {
+      Alert.alert("Unavailable", "Name editing is not available right now.");
+      return;
+    }
+
+    setBusyAction("name");
+
+    try {
+      await updateUser({
+        firstName: trimmedFirstName || undefined,
+        lastName: trimmedLastName || undefined,
+      });
+      await reloadUser();
+      setActiveModal(null);
+    } catch (error) {
+      console.warn("[settings] Failed to update name.", error);
+      Alert.alert("Unable to save", "We could not update your name right now.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleSaveWeight() {
+    const parsedWeight = Number(weightInput);
+
+    if (!weightInput || !Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+      Alert.alert("Invalid weight", "Enter a valid weight.");
+      return;
+    }
+
+    setBusyAction("weight");
+
+    try {
+      await persistOnboardingProfile({
+        weight: Math.round(parsedWeight * 10) / 10,
+      });
+      setActiveModal(null);
+    } catch (error) {
+      console.warn("[settings] Failed to update weight.", error);
+      Alert.alert("Unable to save", "We could not update your weight right now.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleSaveHeight() {
+    const parsedHeight = Number(heightInput);
+
+    if (!heightInput || !Number.isFinite(parsedHeight) || parsedHeight <= 0) {
+      Alert.alert("Invalid height", "Enter a valid height.");
+      return;
+    }
+
+    setBusyAction("height");
+
+    try {
+      await persistOnboardingProfile({
+        height: Math.round(parsedHeight),
+      });
+      setActiveModal(null);
+    } catch (error) {
+      console.warn("[settings] Failed to update height.", error);
+      Alert.alert("Unable to save", "We could not update your height right now.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleSaveGender() {
+    if (!genderInput) {
+      Alert.alert("Select gender", "Choose a gender option.");
+      return;
+    }
+
+    setBusyAction("gender");
+
+    try {
+      await persistOnboardingProfile({
+        gender: genderInput,
+      });
+      setActiveModal(null);
+    } catch (error) {
+      console.warn("[settings] Failed to update gender.", error);
+      Alert.alert("Unable to save", "We could not update your gender right now.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleChangeProfilePicture() {
+    const setProfileImage = editableUser?.setProfileImage;
+
+    if (typeof setProfileImage !== "function") {
+      Alert.alert("Unavailable", "Profile picture updates are not available right now.");
+      return;
+    }
+
+    setActiveModal(null);
+    setBusyAction("photo");
+
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert(
+          "Photo access needed",
+          "Allow photo library access to choose a profile picture.",
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+
+      if (result.canceled || !result.assets[0]) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+
+      if (typeof File !== "function") {
+        throw new Error("File API is unavailable in this runtime.");
+      }
+
+      const file = new File(
+        [blob],
+        asset.fileName ?? `profile-${Date.now()}.jpg`,
+        { type: asset.mimeType ?? "image/jpeg" },
+      );
+
+      await setProfileImage({ file });
+      await reloadUser();
+    } catch (error) {
+      console.warn("[settings] Failed to change profile picture.", error);
+      Alert.alert(
+        "Unable to update picture",
+        "We could not change your profile picture right now.",
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function handleDeletePicturePress() {
+    const setProfileImage = editableUser?.setProfileImage;
+
+    if (typeof setProfileImage !== "function") {
+      Alert.alert("Unavailable", "Profile picture updates are not available right now.");
+      return;
+    }
+
+    Alert.alert(
+      "Delete picture",
+      "Remove your current profile picture?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setActiveModal(null);
+              setBusyAction("photo");
+
+              try {
+                await setProfileImage({ file: null });
+                await reloadUser();
+              } catch (error) {
+                console.warn("[settings] Failed to delete profile picture.", error);
+                Alert.alert(
+                  "Unable to delete picture",
+                  "We could not remove your profile picture right now.",
+                );
+              } finally {
+                setBusyAction(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }
+
   const accountRows: SettingsRowConfig[] = [
     {
-      label: "Sign Out",
+      label: "Personal Information",
+      value: displayName,
+      showChevron: false,
+    },
+    {
+      label: "Unit of Measure",
+      value: profile.displayUnitOfMeasure,
+      showChevron: false,
+    },
+    {
+      label: "Weight",
+      value: profile.displayWeight,
+      onPress: () => {
+        setWeightInput(profile.weight ? String(profile.weight) : "");
+        setActiveModal("weight");
+      },
+    },
+    {
+      label: "Height",
+      value: profile.displayHeight,
+      onPress: () => {
+        setHeightInput(profile.height ? String(profile.height) : "");
+        setActiveModal("height");
+      },
+    },
+    {
+      label: "Gender",
+      value: profile.displayGender,
+      onPress: () => {
+        setGenderInput(isGenderOption(profile.gender) ? profile.gender : null);
+        setActiveModal("gender");
+      },
+    },
+  ];
+
+  const dangerRows: SettingsRowConfig[] = [
+    {
+      label: "Delete",
       destructive: true,
       showChevron: false,
-      onPress: handleSignOut,
+      onPress: handleDeleteAccountPress,
     },
+  ];
+
+  const subscriptionRows: SettingsRowConfig[] = [
+    {
+      label: "Manage Subscription",
+      onPress: () => {
+        router.push("/subscription");
+      },
+    },
+    {
+      label: "Restore Subscription",
+      type: "action",
+      showChevron: false,
+      onPress: () => {
+        // TODO: Connect to App Store / Play Store restore purchase flow later.
+      },
+    },
+  ];
+
+  const appSettingsRows: SettingsRowConfig[] = [
+    {
+      label: "Notifications",
+      onPress: () => {
+        router.push("/notifications");
+      },
+    },
+    {
+      label: "Apple Watch",
+      type: "toggle",
+      enabled: appleWatchEnabled,
+      onToggle: setAppleWatchEnabled,
+      showChevron: false,
+    },
+    {
+      label: "Health App",
+      type: "toggle",
+      enabled: healthAppEnabled,
+      onToggle: setHealthAppEnabled,
+      showChevron: false,
+    },
+    {
+      label: "Workout Reminders",
+      type: "toggle",
+      enabled: workoutRemindersEnabled,
+      onToggle: setWorkoutRemindersEnabled,
+      showChevron: false,
+    },
+    {
+      label: "Week Starts On",
+      value: weekStartsOn,
+      onPress: () => {
+        setWeekStartsOn((current) =>
+          current === "Sunday" ? "Monday" : "Sunday",
+        );
+      },
+    },
+  ];
+
+  const supportRows: SettingsRowConfig[] = [
+    { label: "Terms and Conditions", showChevron: false },
+    { label: "Privacy Policy", showChevron: false },
+    { label: "Acknowledgements", showChevron: false },
+  ];
+
+  const feedbackRows: SettingsRowConfig[] = [
+    { label: "Write to Us", showChevron: false },
+    { label: "Rate the App", showChevron: false },
   ];
 
   return (
@@ -157,7 +524,6 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
       >
-        {/* Profile summary mirrors the reference layout and keeps temporary body metrics visible until profile data is wired. */}
         <View style={styles.profileCard}>
           <View style={styles.avatarRing}>
             {user?.imageUrl ? (
@@ -173,66 +539,245 @@ export default function SettingsScreen() {
             )}
 
             <Pressable
+              onPress={() => setActiveModal("profile")}
               style={styles.editAvatarButton}
               accessibilityRole="button"
               accessibilityLabel="Edit profile"
             >
-              <Pencil size={14} color={colors.homeDark} strokeWidth={2.3} />
+              {busyAction === "photo" ? (
+                <ActivityIndicator size="small" color={colors.homeDark} />
+              ) : (
+                <Pencil size={14} color={colors.homeDark} strokeWidth={2.3} />
+              )}
             </Pressable>
           </View>
 
           <Text style={styles.profileName}>{displayName}</Text>
-          <Text style={styles.profileMetric}>{temporaryProfile.height}</Text>
-          <Text style={styles.profileMetric}>{temporaryProfile.weight}</Text>
+          <Text style={styles.profileMetric}>{profile.displayHeight}</Text>
+          <Text style={styles.profileMetric}>{profile.displayWeight}</Text>
         </View>
 
-        {/* Settings content is grouped into rounded cards so long lists stay scannable and match the dark product surfaces. */}
         <SettingsSection
-          title="App Settings"
-          rows={appSettingsRows}
-          isSubscribed={isSubscribed}
-        />
-        <SettingsSection
-          title="Fitness Preferences"
-          rows={fitnessPreferenceRows}
-          isSubscribed={isSubscribed}
+          title="Account"
+          rows={accountRows}
         />
         <SettingsSection
           title="Subscription"
           rows={subscriptionRows}
-          isSubscribed={isSubscribed}
         />
         <SettingsSection
-          title="AI Features"
-          rows={aiFeatureRows}
-          isSubscribed={isSubscribed}
+          title="App Settings"
+          rows={appSettingsRows}
         />
         <SettingsSection
           title="Support"
           rows={supportRows}
-          isSubscribed={isSubscribed}
         />
         <SettingsSection
-          title="Legal"
-          rows={legalRows}
-          isSubscribed={isSubscribed}
+          title="Feedback"
+          rows={feedbackRows}
         />
         <SettingsSection
-          title="Account"
-          rows={accountRows}
-          isSubscribed={isSubscribed}
+          title="Delete Account"
+          rows={dangerRows}
         />
+
+        <Pressable
+          onPress={() => void handleSignOut()}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.signOutButton,
+            pressed && styles.rowPressed,
+          ]}
+        >
+          <Text style={styles.signOutButtonText}>Sign Out</Text>
+          <LogOut size={17} color="#FFB3C0" strokeWidth={2.15} />
+        </Pressable>
       </ScrollView>
+
+      <Modal
+        transparent
+        visible={activeModal === "profile"}
+        animationType="fade"
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
+
+            <Pressable
+              onPress={() => setActiveModal("name")}
+              style={({ pressed }) => [
+                styles.modalOption,
+                pressed && styles.modalOptionPressed,
+              ]}
+            >
+              <Text style={styles.modalOptionText}>Edit Name</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                void handleChangeProfilePicture();
+              }}
+              style={({ pressed }) => [
+                styles.modalOption,
+                pressed && styles.modalOptionPressed,
+              ]}
+            >
+              <Text style={styles.modalOptionText}>Change Picture</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleDeletePicturePress}
+              style={({ pressed }) => [
+                styles.modalOption,
+                !user?.imageUrl && styles.modalOptionDisabled,
+                pressed && user?.imageUrl && styles.modalOptionPressed,
+              ]}
+              disabled={!user?.imageUrl}
+            >
+              <Text
+                style={[
+                  styles.modalOptionText,
+                  styles.modalDangerText,
+                  !user?.imageUrl && styles.modalOptionTextDisabled,
+                ]}
+              >
+                Delete Picture
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={closeModal}
+              style={({ pressed }) => [
+                styles.modalCancelButton,
+                pressed && styles.modalOptionPressed,
+              ]}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <EditValueModal
+        visible={activeModal === "name"}
+        title="Edit Name"
+        primaryActionLabel={busyAction === "name" ? "Saving..." : "Save"}
+        isBusy={busyAction === "name"}
+        onClose={closeModal}
+        onSave={() => {
+          void handleSaveName();
+        }}
+      >
+        <TextInput
+          value={firstNameInput}
+          onChangeText={setFirstNameInput}
+          placeholder="First name"
+          placeholderTextColor="rgba(255,255,255,0.28)"
+          style={styles.modalInput}
+        />
+        <TextInput
+          value={lastNameInput}
+          onChangeText={setLastNameInput}
+          placeholder="Last name"
+          placeholderTextColor="rgba(255,255,255,0.28)"
+          style={styles.modalInput}
+        />
+      </EditValueModal>
+
+      <EditValueModal
+        visible={activeModal === "weight"}
+        title="Edit Weight"
+        subtitle={`Enter your weight in ${profile.weightUnit}.`}
+        primaryActionLabel={busyAction === "weight" ? "Saving..." : "Save"}
+        isBusy={busyAction === "weight"}
+        onClose={closeModal}
+        onSave={() => {
+          void handleSaveWeight();
+        }}
+      >
+        <TextInput
+          value={weightInput}
+          onChangeText={(value) => setWeightInput(value.replace(/[^0-9.]/g, ""))}
+          keyboardType="decimal-pad"
+          placeholder={`Weight (${profile.weightUnit})`}
+          placeholderTextColor="rgba(255,255,255,0.28)"
+          style={styles.modalInput}
+        />
+      </EditValueModal>
+
+      <EditValueModal
+        visible={activeModal === "height"}
+        title="Edit Height"
+        subtitle={`Enter your height in ${
+          profile.heightUnit === "inches" ? "inches" : "cm"
+        }.`}
+        primaryActionLabel={busyAction === "height" ? "Saving..." : "Save"}
+        isBusy={busyAction === "height"}
+        onClose={closeModal}
+        onSave={() => {
+          void handleSaveHeight();
+        }}
+      >
+        <TextInput
+          value={heightInput}
+          onChangeText={(value) => setHeightInput(value.replace(/[^0-9.]/g, ""))}
+          keyboardType="decimal-pad"
+          placeholder={`Height (${
+            profile.heightUnit === "inches" ? "in" : "cm"
+          })`}
+          placeholderTextColor="rgba(255,255,255,0.28)"
+          style={styles.modalInput}
+        />
+      </EditValueModal>
+
+      <EditValueModal
+        visible={activeModal === "gender"}
+        title="Select Gender"
+        primaryActionLabel={busyAction === "gender" ? "Saving..." : "Save"}
+        isBusy={busyAction === "gender"}
+        onClose={closeModal}
+        onSave={() => {
+          void handleSaveGender();
+        }}
+      >
+        <View style={styles.genderOptionColumn}>
+          {GENDER_OPTIONS.map((option) => {
+            const isSelected = genderInput === option;
+
+            return (
+              <Pressable
+                key={option}
+                onPress={() => setGenderInput(option)}
+                style={({ pressed }) => [
+                  styles.genderOptionButton,
+                  isSelected && styles.genderOptionButtonSelected,
+                  pressed && styles.modalOptionPressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.genderOptionText,
+                    isSelected && styles.genderOptionTextSelected,
+                  ]}
+                >
+                  {option}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </EditValueModal>
     </AppScreen>
   );
 }
 
-// Helper keeps each section title + rounded surface consistent without repeating the surrounding card markup.
-function SettingsSection({
-  title,
-  rows,
-  isSubscribed,
-}: SettingsSectionProps) {
+function isGenderOption(value: string | null): value is GenderOption {
+  return value === "Male" || value === "Female" || value === "Other";
+}
+
+function SettingsSection({ title, rows }: SettingsSectionProps) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -242,7 +787,6 @@ function SettingsSection({
           <SettingsRow
             key={row.label}
             row={row}
-            isSubscribed={isSubscribed}
             isLast={index === rows.length - 1}
           />
         ))}
@@ -251,11 +795,10 @@ function SettingsSection({
   );
 }
 
-// Helper centralizes row states such as premium locking, highlighted upgrades, and the sign-out treatment.
-function SettingsRow({ row, isSubscribed, isLast }: SettingsRowProps) {
-  const isLocked = Boolean(row.premiumOnly && !isSubscribed);
-  const isDisabled = isLocked || !row.onPress;
-  const showPremiumBadge = Boolean(row.badgeLabel);
+function SettingsRow({ row, isLast }: SettingsRowProps) {
+  const isToggle = row.type === "toggle";
+  const isDisabled = isToggle ? !row.onToggle : !row.onPress;
+  const isDestructiveAction = row.destructive && row.type !== "toggle";
 
   return (
     <Pressable
@@ -264,8 +807,6 @@ function SettingsRow({ row, isSubscribed, isLast }: SettingsRowProps) {
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.row,
-        row.highlighted && styles.rowHighlighted,
-        isLocked && styles.rowLocked,
         pressed && !isDisabled && styles.rowPressed,
       ]}
     >
@@ -277,32 +818,24 @@ function SettingsRow({ row, isSubscribed, isLast }: SettingsRowProps) {
         </View>
 
         <View style={styles.rowAccessory}>
-          {row.value ? <Text style={styles.rowValue}>{row.value}</Text> : null}
-
-          {showPremiumBadge ? (
-            <View
-              style={[
-                styles.badge,
-                isLocked ? styles.badgeLocked : styles.badgePremium,
-              ]}
-            >
-              {isLocked ? (
-                <Lock size={11} color={colors.homeCream} strokeWidth={2.1} />
-              ) : row.highlighted ? (
-                <Crown size={11} color={colors.homeDark} strokeWidth={2.1} />
-              ) : null}
-              <Text
-                style={[
-                  styles.badgeText,
-                  isLocked ? styles.badgeTextLocked : styles.badgeTextPremium,
-                ]}
-              >
-                {row.badgeLabel}
-              </Text>
-            </View>
+          {row.value ? (
+            <Text style={[styles.rowValue, row.destructive && styles.rowValueDanger]}>
+              {row.value}
+            </Text>
           ) : null}
 
-          {row.label === "Sign Out" ? (
+          {isToggle ? (
+            <Switch
+              trackColor={{
+                false: NEUTRAL_SWITCH_TRACK,
+                true: NEUTRAL_SWITCH_TRACK,
+              }}
+              thumbColor={NEUTRAL_SWITCH_THUMB}
+              ios_backgroundColor={NEUTRAL_SWITCH_TRACK}
+              value={Boolean(row.enabled)}
+              onValueChange={row.onToggle}
+            />
+          ) : isDestructiveAction ? null : row.label === "Sign Out" ? (
             <LogOut size={17} color="#FFB3C0" strokeWidth={2.15} />
           ) : row.showChevron === false ? null : (
             <ChevronRight
@@ -316,6 +849,68 @@ function SettingsRow({ row, isSubscribed, isLast }: SettingsRowProps) {
 
       {!isLast ? <View style={styles.divider} /> : null}
     </Pressable>
+  );
+}
+
+function EditValueModal({
+  visible,
+  title,
+  subtitle,
+  primaryActionLabel,
+  isBusy,
+  onClose,
+  onSave,
+  children,
+}: {
+  visible: boolean;
+  title: string;
+  subtitle?: string;
+  primaryActionLabel: string;
+  isBusy: boolean;
+  onClose: () => void;
+  onSave: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          {subtitle ? <Text style={styles.modalSubtitle}>{subtitle}</Text> : null}
+
+          <View style={styles.modalInputColumn}>{children}</View>
+
+          <View style={styles.modalButtonRow}>
+            <Pressable
+              onPress={onClose}
+              disabled={isBusy}
+              style={({ pressed }) => [
+                styles.modalSecondaryButton,
+                pressed && !isBusy && styles.modalOptionPressed,
+              ]}
+            >
+              <Text style={styles.modalSecondaryText}>Cancel</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onSave}
+              disabled={isBusy}
+              style={({ pressed }) => [
+                styles.modalPrimaryButton,
+                pressed && !isBusy && styles.modalPrimaryButtonPressed,
+              ]}
+            >
+              <Text style={styles.modalPrimaryText}>{primaryActionLabel}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -407,12 +1002,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  rowHighlighted: {
-    backgroundColor: "rgba(246, 243, 186, 0.08)",
-  },
-  rowLocked: {
-    opacity: 0.76,
-  },
   rowPressed: {
     opacity: 0.84,
   },
@@ -440,6 +1029,9 @@ const styles = StyleSheet.create({
     fontFamily: "MontserratAlternates-Regular",
     fontSize: 12,
   },
+  rowValueDanger: {
+    color: "#FFCDD7",
+  },
   rowAccessory: {
     flexDirection: "row",
     alignItems: "center",
@@ -450,30 +1042,168 @@ const styles = StyleSheet.create({
     marginTop: 14,
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-  badge: {
-    minHeight: 24,
-    borderRadius: 999,
-    paddingHorizontal: 10,
+  signOutButton: {
+    marginTop: 24,
+    minHeight: 54,
+    borderRadius: 24,
+    paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
   },
-  badgePremium: {
-    backgroundColor: colors.homeCream,
-  },
-  badgeLocked: {
-    backgroundColor: "rgba(246, 243, 186, 0.15)",
-  },
-  badgeText: {
+  signOutButtonText: {
+    color: "#FFCDD7",
     fontFamily: "MontserratAlternates-SemiBold",
-    fontSize: 10,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+    fontSize: 14,
   },
-  badgeTextPremium: {
-    color: colors.homeDark,
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(6, 6, 12, 0.66)",
   },
-  badgeTextLocked: {
-    color: colors.homeCream,
+  modalCard: {
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingVertical: 24,
+    backgroundColor: "#211C2E",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  modalTitle: {
+    color: colors.journeyText,
+    fontFamily: "MontserratAlternates-Bold",
+    fontSize: 20,
+    lineHeight: 26,
+  },
+  modalSubtitle: {
+    marginTop: 8,
+    color: "rgba(255,255,255,0.58)",
+    fontFamily: "MontserratAlternates-Regular",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  modalInputColumn: {
+    marginTop: 18,
+    gap: 12,
+  },
+  modalInput: {
+    minHeight: 52,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    color: colors.journeyText,
+    fontFamily: "MontserratAlternates-Regular",
+    fontSize: 14,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  modalButtonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 22,
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  modalPrimaryButtonPressed: {
+    opacity: 0.88,
+  },
+  modalPrimaryText: {
+    color: colors.journeyText,
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 14,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  modalSecondaryText: {
+    color: colors.journeyText,
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 14,
+  },
+  modalOption: {
+    minHeight: 52,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    marginTop: 14,
+  },
+  modalOptionPressed: {
+    opacity: 0.84,
+  },
+  modalOptionDisabled: {
+    opacity: 0.45,
+  },
+  modalOptionText: {
+    color: colors.journeyText,
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 14,
+  },
+  modalOptionTextDisabled: {
+    color: "rgba(255,255,255,0.38)",
+  },
+  modalDangerText: {
+    color: "#FFCDD7",
+  },
+  modalCancelButton: {
+    minHeight: 48,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    marginTop: 14,
+  },
+  modalCancelText: {
+    color: "rgba(255,255,255,0.58)",
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 14,
+  },
+  genderOptionColumn: {
+    gap: 12,
+  },
+  genderOptionButton: {
+    minHeight: 52,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  genderOptionButtonSelected: {
+    borderColor: "rgba(255,255,255,0.52)",
+  },
+  genderOptionText: {
+    color: "rgba(255,255,255,0.72)",
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 14,
+  },
+  genderOptionTextSelected: {
+    color: colors.journeyText,
   },
 });
