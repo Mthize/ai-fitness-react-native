@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Dimensions,
@@ -23,11 +23,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppScreen } from "@/components/AppScreen";
-import {
-  markWorkoutCompleted,
-  MOCK_WORKOUT,
-  type WorkoutId,
-} from "@/components/workout/workoutData";
+import { MOCK_WORKOUT } from "@/components/workout/workoutData";
 import {
   colors,
   CONFETTI_LAVENDER,
@@ -45,7 +41,6 @@ import {
   SUCCESS_STRENGTH,
   SUCCESS_TROPHY,
 } from "@/constants/colors";
-import { useUser } from "@/lib/clerk";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -54,13 +49,13 @@ const DESIGN_HEIGHT = 844;
 
 const SCALE_X = SCREEN_WIDTH / DESIGN_WIDTH;
 const SCALE_Y = SCREEN_HEIGHT / DESIGN_HEIGHT;
+const SCALE = Math.min(SCALE_X, SCALE_Y);
 
-const CARD_WIDTH = 248 * SCALE_X;
-const CARD_HEIGHT = 326 * SCALE_Y;
-const BUTTON_WIDTH = SCREEN_WIDTH - 64;
-
-const CARD_WRAP_TOP = 190 * SCALE_Y;
-const CONFETTI_TOP_OFFSET = -36 * SCALE_Y;
+const CARD_WIDTH = Math.min(SCREEN_WIDTH - 72, 268 * SCALE);
+const CARD_HEIGHT = Math.min(SCREEN_HEIGHT * 0.38, 318 * SCALE);
+const CARD_STACK_HEIGHT = CARD_HEIGHT + 128 * SCALE;
+const BUTTON_WIDTH = Math.min(SCREEN_WIDTH - 48, 342 * SCALE_X);
+const CONFETTI_SCALE = Math.min(SCALE, 1) * 0.68;
 
 type SuccessState = {
   icon: "fire" | "trophy" | "arm-flex" | "lightning-bolt" | "check-decagram";
@@ -103,14 +98,14 @@ const SUCCESS_STATES: SuccessState[] = [
 
 const CONFETTI_PIECES: ConfettiPiece[] = [
   {
-    id: "left-confetti-orange-light-arc-top",
+    id: "left-orange-arc-top",
     style: {
-      left: 26 * SCALE_X,
-      top: 274 * SCALE_Y,
-      width: 28 * SCALE_X,
-      height: 56 * SCALE_Y,
-      borderRadius: 24 * SCALE_X,
-      borderWidth: 8,
+      left: 24 * SCALE_X,
+      top: 170 * SCALE_Y,
+      width: 28 * SCALE_X * CONFETTI_SCALE,
+      height: 56 * SCALE_Y * CONFETTI_SCALE,
+      borderRadius: 24 * SCALE_X * CONFETTI_SCALE,
+      borderWidth: 6,
       borderColor: CONFETTI_ORANGE_LIGHT,
       borderTopColor: "transparent",
       borderLeftColor: "transparent",
@@ -119,14 +114,14 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "left-confetti-purple-arc-top",
+    id: "left-purple-arc-top",
     style: {
-      left: 118 * SCALE_X,
-      top: 232 * SCALE_Y,
-      width: 74 * SCALE_X,
-      height: 74 * SCALE_Y,
+      left: 92 * SCALE_X,
+      top: 142 * SCALE_Y,
+      width: 74 * SCALE_X * CONFETTI_SCALE,
+      height: 74 * SCALE_Y * CONFETTI_SCALE,
       borderRadius: 999,
-      borderWidth: 9,
+      borderWidth: 7,
       borderColor: CONFETTI_PURPLE,
       borderBottomColor: "transparent",
       borderLeftColor: "transparent",
@@ -135,14 +130,14 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "left-confetti-pink-arc",
+    id: "left-pink-arc",
     style: {
-      left: 12 * SCALE_X,
-      top: 384 * SCALE_Y,
-      width: 26 * SCALE_X,
-      height: 54 * SCALE_Y,
-      borderRadius: 22 * SCALE_X,
-      borderWidth: 7,
+      left: 14 * SCALE_X,
+      top: 340 * SCALE_Y,
+      width: 26 * SCALE_X * CONFETTI_SCALE,
+      height: 54 * SCALE_Y * CONFETTI_SCALE,
+      borderRadius: 22 * SCALE_X * CONFETTI_SCALE,
+      borderWidth: 6,
       borderColor: CONFETTI_PINK,
       borderTopColor: "transparent",
       borderLeftColor: "transparent",
@@ -151,26 +146,26 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "left-confetti-purple-dark-bar",
+    id: "left-purple-bar",
     style: {
-      left: 48 * SCALE_X,
-      top: 486 * SCALE_Y,
-      width: 10 * SCALE_X,
-      height: 82 * SCALE_Y,
+      left: 42 * SCALE_X,
+      top: 462 * SCALE_Y,
+      width: 10 * SCALE_X * CONFETTI_SCALE,
+      height: 82 * SCALE_Y * CONFETTI_SCALE,
       borderRadius: 999,
       backgroundColor: CONFETTI_PURPLE_DARK,
       transform: [{ rotate: "74deg" }],
     },
   },
   {
-    id: "left-confetti-violet-arc-low",
+    id: "left-violet-arc-low",
     style: {
-      left: 18 * SCALE_X,
-      top: 552 * SCALE_Y,
-      width: 42 * SCALE_X,
-      height: 68 * SCALE_Y,
-      borderRadius: 28 * SCALE_X,
-      borderWidth: 8,
+      left: 20 * SCALE_X,
+      top: 570 * SCALE_Y,
+      width: 42 * SCALE_X * CONFETTI_SCALE,
+      height: 68 * SCALE_Y * CONFETTI_SCALE,
+      borderRadius: 28 * SCALE_X * CONFETTI_SCALE,
+      borderWidth: 6,
       borderColor: CONFETTI_VIOLET,
       borderTopColor: "transparent",
       borderLeftColor: "transparent",
@@ -179,14 +174,14 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "right-confetti-lavender-arc-top",
+    id: "right-lavender-arc-top",
     style: {
-      right: 28 * SCALE_X,
-      top: 222 * SCALE_Y,
-      width: 42 * SCALE_X,
-      height: 68 * SCALE_Y,
-      borderRadius: 30 * SCALE_X,
-      borderWidth: 8,
+      right: 26 * SCALE_X,
+      top: 150 * SCALE_Y,
+      width: 42 * SCALE_X * CONFETTI_SCALE,
+      height: 68 * SCALE_Y * CONFETTI_SCALE,
+      borderRadius: 30 * SCALE_X * CONFETTI_SCALE,
+      borderWidth: 6,
       borderColor: CONFETTI_LAVENDER,
       borderTopColor: "transparent",
       borderRightColor: "transparent",
@@ -195,26 +190,26 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "right-confetti-pink-bright-bar",
+    id: "right-pink-bar",
     style: {
-      right: 58 * SCALE_X,
-      top: 346 * SCALE_Y,
-      width: 10 * SCALE_X,
-      height: 78 * SCALE_Y,
+      right: 48 * SCALE_X,
+      top: 296 * SCALE_Y,
+      width: 10 * SCALE_X * CONFETTI_SCALE,
+      height: 78 * SCALE_Y * CONFETTI_SCALE,
       borderRadius: 999,
       backgroundColor: CONFETTI_PINK_BRIGHT,
       transform: [{ rotate: "72deg" }],
     },
   },
   {
-    id: "right-confetti-purple-arc-mid",
+    id: "right-purple-arc-mid",
     style: {
-      right: 6 * SCALE_X,
-      top: 446 * SCALE_Y,
-      width: 44 * SCALE_X,
-      height: 70 * SCALE_Y,
-      borderRadius: 32 * SCALE_X,
-      borderWidth: 8,
+      right: 8 * SCALE_X,
+      top: 410 * SCALE_Y,
+      width: 44 * SCALE_X * CONFETTI_SCALE,
+      height: 70 * SCALE_Y * CONFETTI_SCALE,
+      borderRadius: 32 * SCALE_X * CONFETTI_SCALE,
+      borderWidth: 6,
       borderColor: CONFETTI_PURPLE,
       borderTopColor: "transparent",
       borderRightColor: "transparent",
@@ -223,14 +218,14 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "right-confetti-pink-deep-arc-low",
+    id: "right-pink-arc-low",
     style: {
-      right: 12 * SCALE_X,
-      top: 552 * SCALE_Y,
-      width: 32 * SCALE_X,
-      height: 56 * SCALE_Y,
-      borderRadius: 22 * SCALE_X,
-      borderWidth: 7,
+      right: 16 * SCALE_X,
+      top: 536 * SCALE_Y,
+      width: 32 * SCALE_X * CONFETTI_SCALE,
+      height: 56 * SCALE_Y * CONFETTI_SCALE,
+      borderRadius: 22 * SCALE_X * CONFETTI_SCALE,
+      borderWidth: 5,
       borderColor: CONFETTI_PINK_DEEP,
       borderTopColor: "transparent",
       borderRightColor: "transparent",
@@ -239,14 +234,14 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
   {
-    id: "right-confetti-orange-dark-arc-low",
+    id: "right-orange-arc-low",
     style: {
-      right: 6 * SCALE_X,
-      top: 612 * SCALE_Y,
-      width: 42 * SCALE_X,
-      height: 68 * SCALE_Y,
-      borderRadius: 28 * SCALE_X,
-      borderWidth: 8,
+      right: 10 * SCALE_X,
+      top: 628 * SCALE_Y,
+      width: 42 * SCALE_X * CONFETTI_SCALE,
+      height: 68 * SCALE_Y * CONFETTI_SCALE,
+      borderRadius: 28 * SCALE_X * CONFETTI_SCALE,
+      borderWidth: 6,
       borderColor: CONFETTI_ORANGE_DARK,
       borderTopColor: "transparent",
       borderRightColor: "transparent",
@@ -255,6 +250,13 @@ const CONFETTI_PIECES: ConfettiPiece[] = [
     },
   },
 ];
+
+function getRandomSuccessState() {
+  return (
+    SUCCESS_STATES[Math.floor(Math.random() * SUCCESS_STATES.length)] ??
+    SUCCESS_STATES[0]!
+  );
+}
 
 function AnimatedConfettiPiece({
   piece,
@@ -267,15 +269,15 @@ function AnimatedConfettiPiece({
 
   useEffect(() => {
     floatProgress.value = withDelay(
-      index * 120,
+      index * 110,
       withRepeat(
         withSequence(
           withTiming(1, {
-            duration: 1300 + index * 80,
+            duration: 1400 + index * 70,
             easing: Easing.inOut(Easing.quad),
           }),
           withTiming(0, {
-            duration: 1300 + index * 80,
+            duration: 1400 + index * 70,
             easing: Easing.inOut(Easing.quad),
           }),
         ),
@@ -286,22 +288,16 @@ function AnimatedConfettiPiece({
   }, [floatProgress, index]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    opacity: 0.82 + floatProgress.value * 0.18,
-    transform: [{ translateY: -8 * SCALE_Y * floatProgress.value }],
+    opacity: 0.26 + floatProgress.value * 0.16,
+    transform: [{ translateY: -7 * SCALE_Y * floatProgress.value }],
   }));
-
-  const pieceTop =
-    typeof piece.style.top === "number" ? piece.style.top + CONFETTI_TOP_OFFSET : piece.style.top;
 
   return (
     <Animated.View
       pointerEvents="none"
       style={[styles.animatedConfettiShell, animatedStyle]}
     >
-      <View
-        pointerEvents="none"
-        style={[styles.confettiPiece, piece.style, { top: pieceTop }]}
-      />
+      <View pointerEvents="none" style={[styles.confettiPiece, piece.style]} />
     </Animated.View>
   );
 }
@@ -309,32 +305,14 @@ function AnimatedConfettiPiece({
 export default function WorkoutSuccessScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useUser();
-  const { saveStatus, sessionId, workoutId } = useLocalSearchParams<{
-    saveStatus?: string;
-    sessionId?: string;
-    workoutId?: string;
-  }>();
-  const shouldUseMockCompletionFallback =
-    saveStatus === "fallback" || !sessionId;
 
-  const [successState] = useState(
-    () => SUCCESS_STATES[Math.floor(Math.random() * SUCCESS_STATES.length)],
-  );
+  const [successState] = useState(getRandomSuccessState);
 
   useEffect(() => {
-    // TODO: Remove this local completion fallback once backend persistence is fully stable across all workout flows.
-    if (
-      shouldUseMockCompletionFallback &&
-      (workoutId === "warmup-run" || workoutId === "pushups")
-    ) {
-      markWorkoutCompleted(user?.id, workoutId as WorkoutId);
-    }
-
     void Haptics.notificationAsync(
       Haptics.NotificationFeedbackType.Success,
     ).catch(() => undefined);
-  }, [shouldUseMockCompletionFallback, user?.id, workoutId]);
+  }, []);
 
   const handleContinue = () => {
     router.replace("/home");
@@ -342,118 +320,211 @@ export default function WorkoutSuccessScreen() {
 
   return (
     <AppScreen backgroundColor={colors.background}>
-      <View className="flex-1">
-        {CONFETTI_PIECES.map((piece, index) => (
-          <AnimatedConfettiPiece key={piece.id} piece={piece} index={index} />
-        ))}
+      <View style={styles.screen}>
+        <View pointerEvents="none" style={styles.confettiLayer}>
+          {CONFETTI_PIECES.map((piece, index) => (
+            <AnimatedConfettiPiece key={piece.id} piece={piece} index={index} />
+          ))}
+        </View>
 
         <View
-          className="absolute inset-x-0 items-center z-[5]"
-          style={{ top: CARD_WRAP_TOP }}
+          style={[
+            styles.cardContent,
+            {
+              paddingTop: Math.max(insets.top + 18, 34),
+              paddingBottom: Math.max(insets.bottom + 108, 132),
+            },
+          ]}
         >
           <View
-            pointerEvents="none"
-            className="absolute z-[1] border border-white/[0.12] bg-white/10"
-            style={{
-              top: -118 * SCALE_Y,
-              width: 204 * SCALE_X,
-              height: 150 * SCALE_Y,
-              borderRadius: 18 * SCALE_X,
-            }}
-          />
-
-          <BlurView
-            intensity={36}
-            tint="light"
-            pointerEvents="none"
-            className="absolute overflow-hidden z-[2]"
-            style={{
-              top: -62 * SCALE_Y,
-              width: 228 * SCALE_X,
-              height: 170 * SCALE_Y,
-              borderRadius: 18 * SCALE_X,
-            }}
+            style={[
+              styles.cardStack,
+              {
+                width: CARD_WIDTH,
+                height: CARD_STACK_HEIGHT,
+              },
+            ]}
           >
-            <View className="absolute inset-0 border border-white/[0.16] bg-white/[0.20]" />
-          </BlurView>
-
-          <View
-            className="z-[3] items-center justify-center bg-white shadow-lg"
-            style={{
-              width: CARD_WIDTH,
-              height: CARD_HEIGHT,
-              borderRadius: 18 * SCALE_X,
-              paddingHorizontal: 26 * SCALE_X,
-            }}
-          >
-            <MaterialCommunityIcons
-              name={successState.icon}
-              size={64 * SCALE_X}
-              color={successState.iconColor}
-              style={{ marginBottom: 26 * SCALE_Y }}
+            <View
+              pointerEvents="none"
+              style={[
+                styles.backCard,
+                {
+                  width: CARD_WIDTH * 0.74,
+                  height: CARD_HEIGHT * 0.34,
+                  top: 0,
+                  left: CARD_WIDTH * 0.13,
+                  borderRadius: 20 * SCALE,
+                },
+              ]}
             />
 
-            <Text
-              className="text-center font-[MontserratAlternates-Bold] text-[#111018]"
-              style={{
-                fontSize: 15 * SCALE_X,
-                lineHeight: 19 * SCALE_X,
-                maxWidth: 180 * SCALE_X,
-              }}
+            <BlurView
+              intensity={34}
+              tint="light"
+              pointerEvents="none"
+              style={[
+                styles.blurCard,
+                {
+                  width: CARD_WIDTH * 0.88,
+                  height: CARD_HEIGHT * 0.4,
+                  top: 48 * SCALE,
+                  left: CARD_WIDTH * 0.06,
+                  borderRadius: 22 * SCALE,
+                },
+              ]}
             >
-              {successState.title}
-            </Text>
+              <View style={styles.blurOverlay} />
+            </BlurView>
+
+            <View
+              style={[
+                styles.mainCard,
+                {
+                  width: CARD_WIDTH,
+                  height: CARD_HEIGHT,
+                  top: 104 * SCALE,
+                  borderRadius: 24 * SCALE,
+                  paddingHorizontal: 24 * SCALE,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={successState.icon}
+                size={62 * SCALE}
+                color={successState.iconColor}
+                style={{ marginBottom: 22 * SCALE }}
+              />
+
+              <Text
+                style={[
+                  styles.successTitle,
+                  {
+                    fontSize: 18 * SCALE,
+                    lineHeight: 24 * SCALE,
+                    maxWidth: CARD_WIDTH * 0.76,
+                  },
+                ]}
+              >
+                {successState.title}
+              </Text>
+            </View>
           </View>
         </View>
 
         <View
-          className="absolute inset-x-0 items-center z-[8]"
-          style={{ bottom: Math.max(insets.bottom + 34, 48) }}
+          style={[
+            styles.footer,
+            {
+              bottom: Math.max(insets.bottom + 28, 42),
+            },
+          ]}
         >
-          {__DEV__ && saveStatus === "fallback" ? (
-            <Text style={styles.devWarningText}>
-              Supabase session save was unavailable. Success used the local fallback.
-            </Text>
-          ) : null}
-
           <Pressable
             accessibilityLabel="Continue back to home"
             onPress={handleContinue}
-            className="items-center justify-center bg-[#D6EBEB]"
-            style={{
-              width: BUTTON_WIDTH,
-              height: 58 * SCALE_Y,
-              borderRadius: 29 * SCALE_Y,
-            }}
+            style={({ pressed }) => [
+              styles.continueButton,
+              {
+                width: BUTTON_WIDTH,
+              },
+              pressed && styles.continueButtonPressed,
+            ]}
           >
-            <Text className="font-[MontserratAlternates-SemiBold] text-[15px] leading-[19px] text-[#262135]">
-              Continue
-            </Text>
+            <Text style={styles.continueButtonText}>Continue</Text>
           </Pressable>
         </View>
-
-        {/* TODO: Remove the mock completion fallback once backend session persistence is stable for every workout flow. */}
       </View>
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  confettiLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
   animatedConfettiShell: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 2,
+    zIndex: 0,
   },
   confettiPiece: {
     position: "absolute",
+    zIndex: 0,
+  },
+  cardContent: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
     zIndex: 2,
   },
-  devWarningText: {
-    color: "rgba(255,255,255,0.72)",
-    fontFamily: "MontserratAlternates-Regular",
-    fontSize: 10 * SCALE_X,
-    lineHeight: 14 * SCALE_X,
-    marginBottom: 12 * SCALE_Y,
-    maxWidth: BUTTON_WIDTH,
+  cardStack: {
+    position: "relative",
+    alignItems: "center",
+  },
+  backCard: {
+    position: "absolute",
+    zIndex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  blurCard: {
+    position: "absolute",
+    zIndex: 2,
+    overflow: "hidden",
+  },
+  blurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  mainCard: {
+    position: "absolute",
+    zIndex: 3,
+    elevation: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000000",
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 18 },
+  },
+  successTitle: {
+    color: "#111018",
+    fontFamily: "MontserratAlternates-Bold",
+    textAlign: "center",
+  },
+  footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 5,
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  continueButton: {
+    minHeight: 58,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#D6EBEB",
+  },
+  continueButtonPressed: {
+    opacity: 0.9,
+  },
+  continueButtonText: {
+    color: "#262135",
+    fontFamily: "MontserratAlternates-SemiBold",
+    fontSize: 16,
+    lineHeight: 20,
     textAlign: "center",
   },
 });
